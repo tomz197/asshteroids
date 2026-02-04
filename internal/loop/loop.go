@@ -1,9 +1,9 @@
+// Package loop provides the main game loop and state management.
 package loop
 
 import (
 	"bufio"
 	"io"
-	"math"
 	"time"
 
 	"github.com/tomz197/asteroids/internal/draw"
@@ -43,15 +43,6 @@ func Run(r *bufio.Reader, w io.Writer) error {
 	termWidth, termHeight, _ := draw.TerminalSizeRaw()
 	canvas := draw.NewScaledCanvas(termWidth, termHeight, targetWidth, targetHeight)
 
-	user := object.NewUser(float64(targetWidth/2), float64(targetHeight/2))
-	state.AddObject(user)
-
-	// Spawn initial asteroids
-	for i := 0; i < initialAsteroids; i++ {
-		asteroid := object.NewAsteroidAtEdge(state.Screen, object.AsteroidLarge)
-		state.AddObject(asteroid)
-	}
-
 	lastTime := time.Now()
 
 	for state.Running {
@@ -68,12 +59,17 @@ func Run(r *bufio.Reader, w io.Writer) error {
 		if err := updateScreen(state, canvas); err != nil {
 			return err
 		}
-		if err := updateObjects(state); err != nil {
-			return err
-		}
 
-		// ===== COLLISION PHASE =====
-		checkCollisions(state)
+		switch state.GameState {
+		case GameStateStart:
+			updateStartState(state)
+		case GameStatePlaying:
+			if err := updatePlayingState(state); err != nil {
+				return err
+			}
+		case GameStateDead:
+			updateDeadState(state)
+		}
 
 		// ===== DRAW PHASE =====
 		if err := drawFrame(state, w, canvas); err != nil {
@@ -120,7 +116,6 @@ func processInput(state *State, stream *input.Stream) error {
 }
 
 // updateScreen checks for terminal resize and updates canvas scaling.
-// Logical screen dimensions stay fixed at target resolution.
 func updateScreen(state *State, canvas *draw.Canvas) error {
 	termWidth, termHeight, err := draw.TerminalSizeRaw()
 	if err != nil {
@@ -129,32 +124,6 @@ func updateScreen(state *State, canvas *draw.Canvas) error {
 
 	// Resize canvas if terminal changed (updates scaling)
 	canvas.Resize(termWidth, termHeight)
-
-	// Logical dimensions stay constant
-	// state.Screen is already set to target resolution
-
-	return nil
-}
-
-// updateObjects updates all objects and removes any that request removal.
-func updateObjects(state *State) error {
-	ctx := state.UpdateContext()
-
-	// Update objects and collect ones to keep
-	kept := state.Objects[:0] // reuse backing array
-	for _, obj := range state.Objects {
-		remove, err := obj.Update(ctx)
-		if err != nil {
-			return err
-		}
-		if !remove {
-			kept = append(kept, obj)
-		}
-	}
-	state.Objects = kept
-
-	// Add any newly spawned objects
-	state.FlushSpawned()
 
 	return nil
 }
@@ -180,50 +149,8 @@ func drawFrame(state *State, w io.Writer, canvas *draw.Canvas) error {
 	// Render canvas to terminal
 	canvas.Render(w)
 
+	// Draw UI overlay (after canvas render so it's on top)
+	drawUI(state, w, canvas)
+
 	return nil
-}
-
-// checkCollisions detects and handles collisions between objects.
-func checkCollisions(state *State) {
-	// Collect projectiles and asteroids
-	var projectiles []*object.Projectile
-	var asteroids []*object.Asteroid
-
-	for _, obj := range state.Objects {
-		switch o := obj.(type) {
-		case *object.Projectile:
-			projectiles = append(projectiles, o)
-		case *object.Asteroid:
-			asteroids = append(asteroids, o)
-		}
-	}
-
-	// Check projectile-asteroid collisions
-	for _, p := range projectiles {
-		for _, a := range asteroids {
-			if a.Destroyed {
-				continue
-			}
-			if collides(p.X, p.Y, a.X, a.Y, a.GetRadius()) {
-				// Destroy both projectile and asteroid
-				p.Lifetime = 0 // Mark projectile for removal
-				a.Hit()        // Mark asteroid for splitting/removal
-			}
-		}
-	}
-}
-
-// collides checks if a point is within radius of a target position.
-func collides(px, py, tx, ty, radius float64) bool {
-	dx := px - tx
-	dy := py - ty
-	distSq := dx*dx + dy*dy
-	return distSq <= radius*radius
-}
-
-// distance calculates the distance between two points.
-func distance(x1, y1, x2, y2 float64) float64 {
-	dx := x2 - x1
-	dy := y2 - y1
-	return math.Sqrt(dx*dx + dy*dy)
 }

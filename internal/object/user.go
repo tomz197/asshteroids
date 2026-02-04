@@ -131,3 +131,23 @@ func (u *User) Draw(ctx DrawContext) error {
 
 	return nil
 }
+
+// GetPosition returns the ship's center position.
+func (u *User) GetPosition() (float64, float64) {
+	return u.X, u.Y
+}
+
+// GetRadius returns the ship's collision radius.
+func (u *User) GetRadius() float64 {
+	return u.Size * 0.6 // Slightly smaller than visual size for fairness
+}
+
+// Reset resets the ship to center with no velocity.
+func (u *User) Reset(x, y float64) {
+	u.X = x
+	u.Y = y
+	u.VX = 0
+	u.VY = 0
+	u.Angle = -math.Pi / 2
+	u.fireCooldown = 0
+}

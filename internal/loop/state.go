@@ -6,21 +6,36 @@ import (
 	"github.com/tomz197/asteroids/internal/object"
 )
 
+// GameState represents the current game phase.
+type GameState int
+
+const (
+	GameStateStart   GameState = iota // Title screen
+	GameStatePlaying                  // Active gameplay
+	GameStateDead                     // Player died, show restart prompt
+)
+
 // State holds all game state.
 type State struct {
-	Objects []object.Object
-	toSpawn []object.Object // Objects to add after current update cycle
-	Screen  object.Screen
-	Input   object.Input
-	Delta   time.Duration
-	Running bool
+	Objects   []object.Object
+	toSpawn   []object.Object // Objects to add after current update cycle
+	Screen    object.Screen
+	Input     object.Input
+	Delta     time.Duration
+	Running   bool
+	GameState GameState
+	Player    *object.User // Reference to player ship
+	Score     int
+	Lives     int
 }
 
 // NewState creates a new initialized game state.
 func NewState() *State {
 	return &State{
-		Objects: []object.Object{},
-		Running: true,
+		Objects:   []object.Object{},
+		Running:   true,
+		GameState: GameStateStart,
+		Lives:     3,
 	}
 }
 
