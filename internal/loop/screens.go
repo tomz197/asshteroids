@@ -61,7 +61,7 @@ func startGame(state *State) {
 		state.Objects = kept
 	}
 
-	state.AddObject(object.NewAsteroidSpawner(60))
+	state.AddObject(object.NewAsteroidSpawner(30))
 
 	// Create player at center
 	player := object.NewUser(float64(targetWidth/2), float64(targetHeight/2))

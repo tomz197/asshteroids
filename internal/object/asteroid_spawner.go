@@ -26,20 +26,15 @@ func (s *AsteroidSpawner) Update(ctx UpdateContext) (bool, error) {
 		return false, nil
 	}
 
-	for s.target-count > 5 {
-		var size AsteroidSize
-		if s.target-count > 4 {
-			size = AsteroidLarge
-			count += 4
-		} else if s.target-count > 2 {
-			size = AsteroidMedium
-			count += 2
-		} else {
-			size = AsteroidSmall
-			count += 1
-		}
-
-		asteroid := NewAsteroidAtEdge(ctx.Screen, size)
+	for s.target-count >= 12 {
+		count += 4
+		asteroid := NewAsteroidAtEdge(ctx.Screen, AsteroidLarge)
+		ctx.Spawner.Spawn(asteroid)
+		count += 4
+		asteroid = NewAsteroidAtEdge(ctx.Screen, AsteroidLarge)
+		ctx.Spawner.Spawn(asteroid)
+		count += 4
+		asteroid = NewAsteroidAtEdge(ctx.Screen, AsteroidLarge)
 		ctx.Spawner.Spawn(asteroid)
 	}
 	return false, nil
