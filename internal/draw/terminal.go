@@ -36,28 +36,6 @@ func MoveCursor(w io.Writer, x, y int) {
 	fmt.Fprintf(w, "\033[%d;%dH", y, x)
 }
 
-// TerminalSize returns the terminal width and height using the default size function.
-// Height is in sub-pixel units (2x terminal rows) for use with Canvas.
-func TerminalSize() (Screen, error) {
-	return TerminalSizeWith(DefaultTermSizeFunc)
-}
-
-// TerminalSizeWith returns terminal size using the provided size function.
-func TerminalSizeWith(sizeFunc TermSizeFunc) (Screen, error) {
-	width, height, err := sizeFunc()
-	if err != nil {
-		return Screen{}, err
-	}
-	// Return height as sub-pixel height (2x terminal rows)
-	subPixelHeight := height * 2
-	return Screen{
-		Width:   width,
-		Height:  subPixelHeight,
-		CenterX: width / 2,
-		CenterY: subPixelHeight / 2,
-	}, nil
-}
-
 // TerminalSizeRaw returns the actual terminal dimensions without sub-pixel scaling.
 func TerminalSizeRaw() (width, height int, err error) {
 	return DefaultTermSizeFunc()

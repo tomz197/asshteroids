@@ -4,7 +4,6 @@ package loop
 import (
 	"bufio"
 	"io"
-	"math"
 	"time"
 
 	"github.com/tomz197/asteroids/internal/draw"
@@ -133,26 +132,9 @@ func RunWithOptions(r *bufio.Reader, w io.Writer, opts Options) error {
 
 // processInput reads and processes all pending input.
 func processInput(state *State) error {
-	inp := input.ReadInput(state.InputStream)
+	state.Input = input.ReadInput(state.InputStream)
 
-	state.Input = object.Input{
-		Quit:      inp.Quit,
-		Left:      inp.Left,
-		Right:     inp.Right,
-		UpLeft:    inp.UpLeft,
-		UpRight:   inp.UpRight,
-		Up:        inp.Up,
-		Down:      inp.Down,
-		Space:     inp.Space,
-		Enter:     inp.Enter,
-		Backspace: inp.Backspace,
-		Delete:    inp.Delete,
-		Escape:    inp.Escape,
-		Number:    inp.Number,
-		Pressed:   inp.Pressed,
-	}
-
-	if inp.Quit {
+	if state.Input.Quit {
 		state.Running = false
 	}
 
@@ -201,12 +183,8 @@ func drawFrame(state *State, w io.Writer, canvas *draw.Canvas) error {
 	// Draw all objects to canvas
 	for _, obj := range state.Objects {
 		// Skip drawing player when blinking (invincible)
-		if obj == state.Player && state.InvincibleTime > 0 {
-			// Blink at ~10Hz: skip drawing when in "off" phase
-			_, frac := math.Modf(state.InvincibleTime * 10)
-			if frac < 0.5 {
-				continue
-			}
+		if obj == state.Player && !object.ShouldRenderBlink(state.InvincibleTime, 10.0) {
+			continue
 		}
 		if err := obj.Draw(ctx); err != nil {
 			return err

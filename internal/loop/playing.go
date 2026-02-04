@@ -1,9 +1,8 @@
 package loop
 
 import (
-	"math"
-
 	"github.com/tomz197/asteroids/internal/object"
+	"github.com/tomz197/asteroids/internal/physics"
 )
 
 // updatePlayingState handles the playing game state.
@@ -46,13 +45,12 @@ func updateObjects(state *State) error {
 	return nil
 }
 
-// checkCollisions detects and handles collisions between objects.
-func checkCollisions(state *State) {
-	// Collect projectiles and asteroids
+// collectCollidables extracts projectiles and asteroids from the object list.
+func collectCollidables(objects []object.Object) ([]*object.Projectile, []*object.Asteroid) {
 	var projectiles []*object.Projectile
 	var asteroids []*object.Asteroid
 
-	for _, obj := range state.Objects {
+	for _, obj := range objects {
 		switch o := obj.(type) {
 		case *object.Projectile:
 			projectiles = append(projectiles, o)
@@ -60,110 +58,129 @@ func checkCollisions(state *State) {
 			asteroids = append(asteroids, o)
 		}
 	}
+	return projectiles, asteroids
+}
 
-	// Check projectile-asteroid collisions
+// checkCollisions detects and handles all collisions between objects.
+func checkCollisions(state *State) {
+	projectiles, asteroids := collectCollidables(state.Objects)
+
+	checkProjectileAsteroidCollisions(state, projectiles, asteroids)
+	checkProjectileProjectileCollisions(projectiles)
+	checkAsteroidAsteroidCollisions(asteroids)
+
+	// Player collisions only if vulnerable
+	if state.Player != nil && state.GameState == GameStatePlaying && state.InvincibleTime <= 0 {
+		if checkPlayerCollisions(state, projectiles, asteroids) {
+			return // Player died, skip remaining checks
+		}
+	}
+}
+
+// checkProjectileAsteroidCollisions handles projectile hits on asteroids.
+func checkProjectileAsteroidCollisions(state *State, projectiles []*object.Projectile, asteroids []*object.Asteroid) {
 	for _, p := range projectiles {
-		if p.Lifetime <= 0 {
+		if p.IsDestroyed() {
 			continue
 		}
 		for _, a := range asteroids {
-			if a.Destroyed || a.IsProtected() {
+			if a.IsDestroyed() || a.IsProtected() {
 				continue
 			}
-			if collides(p.X, p.Y, a.X, a.Y, a.GetRadius()) {
-				// Destroy both projectile and asteroid
-				p.Lifetime = 0 // Mark projectile for removal
-				a.Hit()        // Mark asteroid for splitting/removal
-
-				// Award points based on asteroid size
-				switch a.Size {
-				case object.AsteroidLarge:
-					state.Score += 20
-				case object.AsteroidMedium:
-					state.Score += 50
-				case object.AsteroidSmall:
-					state.Score += 100
-				}
+			if physics.PointInCircle(p.X, p.Y, a.X, a.Y, a.GetRadius()) {
+				p.MarkDestroyed()
+				a.MarkDestroyed()
+				state.Score += asteroidScore(a.Size)
 			}
 		}
 	}
+}
 
-	// Check projectile-projectile collisions
+// asteroidScore returns the score for destroying an asteroid of the given size.
+func asteroidScore(size object.AsteroidSize) int {
+	switch size {
+	case object.AsteroidLarge:
+		return ScoreLargeAsteroid
+	case object.AsteroidMedium:
+		return ScoreMediumAsteroid
+	case object.AsteroidSmall:
+		return ScoreSmallAsteroid
+	default:
+		return 0
+	}
+}
+
+// checkProjectileProjectileCollisions handles projectile-projectile collisions.
+func checkProjectileProjectileCollisions(projectiles []*object.Projectile) {
 	for i := 0; i < len(projectiles); i++ {
 		p1 := projectiles[i]
-		if p1.Lifetime <= 0 {
+		if p1.IsDestroyed() {
 			continue
 		}
 		for j := i + 1; j < len(projectiles); j++ {
 			p2 := projectiles[j]
-			if p2.Lifetime <= 0 {
+			if p2.IsDestroyed() {
 				continue
 			}
-			// Check if projectiles are close enough to collide
-			dist := distance(p1.X, p1.Y, p2.X, p2.Y)
-			if dist < object.ProjectileRadius*2 {
-				// Destroy both projectiles
-				p1.Lifetime = 0
-				p2.Lifetime = 0
+			if physics.CirclesOverlap(p1.X, p1.Y, object.ProjectileRadius, p2.X, p2.Y, object.ProjectileRadius) {
+				p1.MarkDestroyed()
+				p2.MarkDestroyed()
 			}
 		}
 	}
+}
 
-	// Check projectile-player collisions (skip if invincible)
-	if state.Player != nil && state.GameState == GameStatePlaying && state.InvincibleTime <= 0 {
-		px, py := state.Player.GetPosition()
-		pr := state.Player.GetRadius()
-
-		for _, p := range projectiles {
-			if p.Lifetime <= 0 {
-				continue
-			}
-			if collides(p.X, p.Y, px, py, pr) {
-				p.Lifetime = 0 // Remove projectile
-				killPlayer(state)
-				return
-			}
-		}
-	}
-
-	// Check asteroid-asteroid collisions (bounce)
+// checkAsteroidAsteroidCollisions handles bouncing between asteroids.
+func checkAsteroidAsteroidCollisions(asteroids []*object.Asteroid) {
 	for i := 0; i < len(asteroids); i++ {
 		a1 := asteroids[i]
-		if a1.Destroyed {
+		if a1.IsDestroyed() {
 			continue
 		}
 		for j := i + 1; j < len(asteroids); j++ {
 			a2 := asteroids[j]
-			if a2.Destroyed {
+			if a2.IsDestroyed() {
 				continue
 			}
-			// Circle-circle collision
-			dist := distance(a1.X, a1.Y, a2.X, a2.Y)
+			dist := physics.Distance(a1.X, a1.Y, a2.X, a2.Y)
 			minDist := a1.GetRadius() + a2.GetRadius()
 			if dist < minDist && dist > 0 {
-				// Elastic collision response
 				bounceAsteroids(a1, a2, dist)
 			}
 		}
 	}
+}
 
-	// Check player-asteroid collisions (skip if invincible)
-	if state.Player != nil && state.GameState == GameStatePlaying && state.InvincibleTime <= 0 {
-		px, py := state.Player.GetPosition()
-		pr := state.Player.GetRadius()
+// checkPlayerCollisions checks if the player collides with projectiles or asteroids.
+// Returns true if the player was killed.
+func checkPlayerCollisions(state *State, projectiles []*object.Projectile, asteroids []*object.Asteroid) bool {
+	px, py := state.Player.GetPosition()
+	pr := state.Player.GetRadius()
 
-		for _, a := range asteroids {
-			if a.Destroyed || a.IsProtected() {
-				continue
-			}
-			// Circle-circle collision
-			dist := distance(px, py, a.X, a.Y)
-			if dist < pr+a.GetRadius() {
-				killPlayer(state)
-				return
-			}
+	// Check projectile hits
+	for _, p := range projectiles {
+		if p.IsDestroyed() {
+			continue
+		}
+		if physics.PointInCircle(p.X, p.Y, px, py, pr) {
+			p.MarkDestroyed()
+			killPlayer(state)
+			return true
 		}
 	}
+
+	// Check asteroid collisions
+	for _, a := range asteroids {
+		if a.IsDestroyed() || a.IsProtected() {
+			continue
+		}
+		if physics.CirclesOverlap(px, py, pr, a.X, a.Y, a.GetRadius()) {
+			killPlayer(state)
+			return true
+		}
+	}
+
+	return false
 }
 
 // killPlayer handles player death.
@@ -189,22 +206,7 @@ func killPlayer(state *State) {
 	state.GameState = GameStateDead
 }
 
-// collides checks if a point is within radius of a target position.
-func collides(px, py, tx, ty, radius float64) bool {
-	dx := px - tx
-	dy := py - ty
-	distSq := dx*dx + dy*dy
-	return distSq <= radius*radius
-}
-
-// distance calculates the distance between two points.
-func distance(x1, y1, x2, y2 float64) float64 {
-	dx := x2 - x1
-	dy := y2 - y1
-	return math.Sqrt(dx*dx + dy*dy)
-}
-
-// bounceAsteroids handles collision between two asteroids.
+// bounceAsteroids handles elastic collision between two asteroids.
 func bounceAsteroids(a1, a2 *object.Asteroid, dist float64) {
 	// Calculate collision normal (from a1 to a2)
 	nx := (a2.X - a1.X) / dist

@@ -178,12 +178,8 @@ func (a *Asteroid) Update(ctx UpdateContext) (bool, error) {
 // Draw renders the asteroid as an irregular polygon.
 func (a *Asteroid) Draw(ctx DrawContext) error {
 	// Blink when protected (skip drawing in "off" phase)
-	if a.SpawnProtection > 0 {
-		// Blink at ~5Hz
-		phase := int(a.SpawnProtection * 5)
-		if phase%2 == 0 {
-			return nil
-		}
+	if !ShouldRenderBlink(a.SpawnProtection, 5.0) {
+		return nil
 	}
 
 	// Get screen positions (handles world wrapping)
@@ -217,6 +213,16 @@ func (a *Asteroid) drawAt(ctx DrawContext, screenX, screenY float64) {
 // Hit marks the asteroid as destroyed.
 func (a *Asteroid) Hit() {
 	a.Destroyed = true
+}
+
+// MarkDestroyed marks the asteroid for removal (implements Destructible).
+func (a *Asteroid) MarkDestroyed() {
+	a.Destroyed = true
+}
+
+// IsDestroyed returns true if the asteroid is marked for destruction (implements Destructible).
+func (a *Asteroid) IsDestroyed() bool {
+	return a.Destroyed
 }
 
 // GetPosition returns the asteroid's center position.

@@ -110,9 +110,7 @@ func (u *User) Update(ctx UpdateContext) (bool, error) {
 // Draw renders the spaceship as a triangle pointing in the direction of travel.
 func (u *User) Draw(ctx DrawContext) error {
 	// Get screen positions (handles world wrapping)
-	positions := WorldToScreen(u.X, u.Y, ctx.Camera, ctx.View, ctx.World)
-
-	for _, pos := range positions {
+	for _, pos := range WorldToScreen(u.X, u.Y, ctx.Camera, ctx.View, ctx.World) {
 		u.drawAt(ctx, pos.X, pos.Y)
 	}
 

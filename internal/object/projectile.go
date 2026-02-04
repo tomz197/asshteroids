@@ -6,10 +6,11 @@ import (
 
 // Projectile is a bullet fired by the player.
 type Projectile struct {
-	X, Y     float64 // Position
-	VX, VY   float64 // Velocity
-	Lifetime float64 // Seconds remaining before removal
-	Symbol   rune    // Character to display
+	X, Y      float64 // Position
+	VX, VY    float64 // Velocity
+	Lifetime  float64 // Seconds remaining before removal
+	Symbol    rune    // Character to display
+	destroyed bool    // Marked for destruction
 }
 
 // ProjectileSpeed is the base speed of projectiles.
@@ -32,6 +33,17 @@ func NewProjectile(x, y, angle, shooterVX, shooterVY float64) *Projectile {
 		Lifetime: ProjectileLifetime,
 		Symbol:   '•',
 	}
+}
+
+// MarkDestroyed marks the projectile for removal.
+func (p *Projectile) MarkDestroyed() {
+	p.destroyed = true
+	p.Lifetime = 0
+}
+
+// IsDestroyed returns true if the projectile is marked for destruction.
+func (p *Projectile) IsDestroyed() bool {
+	return p.destroyed || p.Lifetime <= 0
 }
 
 // Update moves the projectile and checks lifetime.
@@ -57,10 +69,7 @@ func (p *Projectile) Update(ctx UpdateContext) (bool, error) {
 // Draw renders the projectile.
 func (p *Projectile) Draw(ctx DrawContext) error {
 	// Get screen positions (handles world wrapping)
-	positions := WorldToScreen(p.X, p.Y, ctx.Camera, ctx.View, ctx.World)
-
-	for _, pos := range positions {
-		// Draw to canvas as a single pixel
+	for _, pos := range WorldToScreen(p.X, p.Y, ctx.Camera, ctx.View, ctx.World) {
 		ctx.Canvas.SetFloat(pos.X, pos.Y)
 	}
 

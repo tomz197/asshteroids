@@ -6,14 +6,6 @@ type Point struct {
 	X, Y float64
 }
 
-// Screen holds terminal dimensions.
-type Screen struct {
-	Width   int
-	Height  int
-	CenterX int
-	CenterY int
-}
-
 // Block characters for drawing.
 const (
 	BlockFull      = '█'

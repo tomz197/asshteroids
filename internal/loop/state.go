@@ -63,7 +63,7 @@ func NewWorldState() *WorldState {
 func NewClientState() *ClientState {
 	return &ClientState{
 		GameState: GameStateStart,
-		Lives:     3,
+		Lives:     InitialLives,
 	}
 }
 

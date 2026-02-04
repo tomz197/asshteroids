@@ -137,18 +137,13 @@ func (p *Particle) Update(ctx UpdateContext) (bool, error) {
 func (p *Particle) Draw(ctx DrawContext) error {
 	// Skip faded particles (< 25% lifetime)
 	if p.Fade && p.MaxLifetime > 0 {
-		ratio := p.Lifetime / p.MaxLifetime
-		if ratio < 0.25 {
+		if p.Lifetime/p.MaxLifetime < 0.25 {
 			return nil
 		}
-		// Otherwise use original symbol
 	}
 
 	// Get screen positions (handles world wrapping)
-	positions := WorldToScreen(p.X, p.Y, ctx.Camera, ctx.View, ctx.World)
-
-	for _, pos := range positions {
-		// Draw to canvas as a single pixel
+	for _, pos := range WorldToScreen(p.X, p.Y, ctx.Camera, ctx.View, ctx.World) {
 		ctx.Canvas.SetFloat(pos.X, pos.Y)
 	}
 

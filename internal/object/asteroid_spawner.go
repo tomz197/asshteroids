@@ -29,16 +29,15 @@ func (s *AsteroidSpawner) Update(ctx UpdateContext) (bool, error) {
 		return false, nil
 	}
 
-	for s.target-count >= 12 {
-		count += 4
+	// Spawn large asteroids in batches when significantly below target
+	// Each large asteroid counts as 4 (can split into 2 medium -> 4 small)
+	const largeAsteroidValue = 4
+	const batchThreshold = 12
+
+	for s.target-count >= batchThreshold {
 		asteroid := NewAsteroidRandom(ctx.Screen, AsteroidLarge, SpawnProtectionTime)
 		ctx.Spawner.Spawn(asteroid)
-		count += 4
-		asteroid = NewAsteroidRandom(ctx.Screen, AsteroidLarge, SpawnProtectionTime)
-		ctx.Spawner.Spawn(asteroid)
-		count += 4
-		asteroid = NewAsteroidRandom(ctx.Screen, AsteroidLarge, SpawnProtectionTime)
-		ctx.Spawner.Spawn(asteroid)
+		count += largeAsteroidValue
 	}
 	return false, nil
 }

@@ -48,7 +48,7 @@ func startGame(state *State) {
 		state.Objects = state.Objects[:0]
 		state.toSpawn = state.toSpawn[:0]
 		state.Score = 0
-		state.Lives = 3
+		state.Lives = InitialLives
 
 	} else {
 		// Respawn - keep asteroids, remove particles
@@ -61,7 +61,7 @@ func startGame(state *State) {
 		state.Objects = kept
 	}
 
-	state.AddObject(object.NewAsteroidSpawner(250))
+	state.AddObject(object.NewAsteroidSpawner(InitialAsteroidTarget))
 
 	// Create player at world center
 	player := object.NewUser(float64(worldWidth/2), float64(worldHeight/2))
@@ -72,8 +72,8 @@ func startGame(state *State) {
 	state.Camera.X = player.X
 	state.Camera.Y = player.Y
 
-	// Grant invincibility for 3 seconds
-	state.InvincibleTime = 3.0
+	// Grant invincibility on spawn
+	state.InvincibleTime = InvincibilitySeconds
 
 	state.GameState = GameStatePlaying
 }
