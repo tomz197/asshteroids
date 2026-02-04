@@ -22,8 +22,25 @@ const (
 	targetHeight = 80  // Logical height (in sub-pixels, so 40 terminal rows)
 )
 
+// Options configures the game loop.
+type Options struct {
+	// TermSizeFunc provides terminal dimensions. If nil, uses default (os.Stdout).
+	TermSizeFunc draw.TermSizeFunc
+}
+
 // Run starts the main game loop with the standard Input → Update → Draw cycle.
+// Uses default terminal size detection from os.Stdout.
 func Run(r *bufio.Reader, w io.Writer) error {
+	return RunWithOptions(r, w, Options{})
+}
+
+// RunWithOptions starts the game loop with custom options.
+func RunWithOptions(r *bufio.Reader, w io.Writer, opts Options) error {
+	termSizeFunc := opts.TermSizeFunc
+	if termSizeFunc == nil {
+		termSizeFunc = draw.DefaultTermSizeFunc
+	}
+
 	state := NewState()
 	stream := input.StartStream(r)
 
@@ -40,8 +57,9 @@ func Run(r *bufio.Reader, w io.Writer) error {
 	}
 
 	// Create scaled canvas - maps logical coordinates to terminal pixels
-	termWidth, termHeight, _ := draw.TerminalSizeRaw()
+	termWidth, termHeight, _ := draw.TerminalSizeRawWith(termSizeFunc)
 	canvas := draw.NewScaledCanvas(termWidth, termHeight, targetWidth, targetHeight)
+	state.termSizeFunc = termSizeFunc
 
 	lastTime := time.Now()
 
@@ -117,7 +135,7 @@ func processInput(state *State, stream *input.Stream) error {
 
 // updateScreen checks for terminal resize and updates canvas scaling.
 func updateScreen(state *State, canvas *draw.Canvas) error {
-	termWidth, termHeight, err := draw.TerminalSizeRaw()
+	termWidth, termHeight, err := draw.TerminalSizeRawWith(state.termSizeFunc)
 	if err != nil {
 		return err
 	}

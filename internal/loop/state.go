@@ -3,6 +3,7 @@ package loop
 import (
 	"time"
 
+	"github.com/tomz197/asteroids/internal/draw"
 	"github.com/tomz197/asteroids/internal/object"
 )
 
@@ -17,16 +18,17 @@ const (
 
 // State holds all game state.
 type State struct {
-	Objects   []object.Object
-	toSpawn   []object.Object // Objects to add after current update cycle
-	Screen    object.Screen
-	Input     object.Input
-	Delta     time.Duration
-	Running   bool
-	GameState GameState
-	Player    *object.User // Reference to player ship
-	Score     int
-	Lives     int
+	Objects      []object.Object
+	toSpawn      []object.Object // Objects to add after current update cycle
+	Screen       object.Screen
+	Input        object.Input
+	Delta        time.Duration
+	Running      bool
+	GameState    GameState
+	Player       *object.User // Reference to player ship
+	Score        int
+	Lives        int
+	termSizeFunc draw.TermSizeFunc // Function to get terminal size
 }
 
 // NewState creates a new initialized game state.
