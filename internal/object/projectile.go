@@ -18,6 +18,9 @@ const ProjectileSpeed = 50.0
 // ProjectileLifetime is how long projectiles last before disappearing.
 const ProjectileLifetime = 2.0
 
+// ProjectileRadius is the collision radius for projectile-projectile collisions.
+const ProjectileRadius = 0.5
+
 // NewProjectile creates a projectile at position (x,y) traveling in direction angle.
 // The projectile inherits the shooter's velocity plus its own speed.
 func NewProjectile(x, y, angle, shooterVX, shooterVY float64) *Projectile {
