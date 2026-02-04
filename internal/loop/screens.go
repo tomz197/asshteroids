@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/tomz197/asteroids/internal/draw"
+	"github.com/tomz197/asteroids/internal/input"
 	"github.com/tomz197/asteroids/internal/object"
 )
 
@@ -41,6 +42,7 @@ func updateDeadState(state *State) {
 
 // startGame initializes a new game or respawns player.
 func startGame(state *State) {
+	input.ResetKeyInput(state.InputStream)
 	if state.GameState == GameStateStart || state.Lives <= 0 {
 		// Full restart
 		state.Objects = state.Objects[:0]
@@ -48,11 +50,6 @@ func startGame(state *State) {
 		state.Score = 0
 		state.Lives = 3
 
-		// Spawn initial asteroids
-		for i := 0; i < initialAsteroids; i++ {
-			asteroid := object.NewAsteroidAtEdge(state.Screen, object.AsteroidLarge)
-			state.AddObject(asteroid)
-		}
 	} else {
 		// Respawn - keep asteroids, remove particles
 		kept := state.Objects[:0]
@@ -64,10 +61,15 @@ func startGame(state *State) {
 		state.Objects = kept
 	}
 
+	state.AddObject(object.NewAsteroidSpawner(60))
+
 	// Create player at center
 	player := object.NewUser(float64(targetWidth/2), float64(targetHeight/2))
 	state.Player = player
 	state.AddObject(player)
+
+	// Grant invincibility for 3 seconds
+	state.InvincibleTime = 3.0
 
 	state.GameState = GameStatePlaying
 }

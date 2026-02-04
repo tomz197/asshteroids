@@ -8,6 +8,14 @@ import (
 
 // updatePlayingState handles the playing game state.
 func updatePlayingState(state *State) error {
+	// Decrement invincibility timer
+	if state.InvincibleTime > 0 {
+		state.InvincibleTime -= state.Delta.Seconds()
+		if state.InvincibleTime < 0 {
+			state.InvincibleTime = 0
+		}
+	}
+
 	if err := updateObjects(state); err != nil {
 		return err
 	}
@@ -77,8 +85,8 @@ func checkCollisions(state *State) {
 		}
 	}
 
-	// Check player-asteroid collisions
-	if state.Player != nil && state.GameState == GameStatePlaying {
+	// Check player-asteroid collisions (skip if invincible)
+	if state.Player != nil && state.GameState == GameStatePlaying && state.InvincibleTime <= 0 {
 		px, py := state.Player.GetPosition()
 		pr := state.Player.GetRadius()
 

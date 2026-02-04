@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/tomz197/asteroids/internal/draw"
+	"github.com/tomz197/asteroids/internal/input"
 	"github.com/tomz197/asteroids/internal/object"
 )
 
@@ -18,17 +19,19 @@ const (
 
 // State holds all game state.
 type State struct {
-	Objects      []object.Object
-	toSpawn      []object.Object // Objects to add after current update cycle
-	Screen       object.Screen
-	Input        object.Input
-	Delta        time.Duration
-	Running      bool
-	GameState    GameState
-	Player       *object.User // Reference to player ship
-	Score        int
-	Lives        int
-	termSizeFunc draw.TermSizeFunc // Function to get terminal size
+	Objects        []object.Object
+	toSpawn        []object.Object // Objects to add after current update cycle
+	Screen         object.Screen
+	Input          object.Input
+	Delta          time.Duration
+	InputStream    *input.Stream
+	Running        bool
+	GameState      GameState
+	Player         *object.User // Reference to player ship
+	Score          int
+	Lives          int
+	InvincibleTime float64           // Remaining invincibility time in seconds
+	termSizeFunc   draw.TermSizeFunc // Function to get terminal size
 }
 
 // NewState creates a new initialized game state.
@@ -65,5 +68,6 @@ func (s *State) UpdateContext() object.UpdateContext {
 		Input:   s.Input,
 		Screen:  s.Screen,
 		Spawner: s,
+		Objects: s.Objects,
 	}
 }

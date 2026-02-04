@@ -147,6 +147,15 @@ parse:
 	return input
 }
 
+func ResetKeyInput(s *Stream) {
+	s.state = keyState{numberVal: -1}
+	buf := []byte{128}
+	for i := range buf {
+		b := buf[i]
+		applyByteToState(&s.state, b, time.Now())
+	}
+}
+
 // applyByteToState updates the key state timestamps based on the pressed byte.
 func applyByteToState(state *keyState, b byte, now time.Time) {
 	switch b {

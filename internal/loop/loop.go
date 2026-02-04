@@ -4,6 +4,7 @@ package loop
 import (
 	"bufio"
 	"io"
+	"math"
 	"time"
 
 	"github.com/tomz197/asteroids/internal/draw"
@@ -13,7 +14,6 @@ import (
 
 const targetFPS = 60
 const targetFrameTime = time.Second / targetFPS
-const initialAsteroids = 4
 
 // Target resolution - game objects use these logical dimensions.
 // Actual rendering scales to fit terminal size.
@@ -42,7 +42,7 @@ func RunWithOptions(r *bufio.Reader, w io.Writer, opts Options) error {
 	}
 
 	state := NewState()
-	stream := input.StartStream(r)
+	state.InputStream = input.StartStream(r)
 
 	draw.HideCursor(w)
 	defer draw.ShowCursor(w)
@@ -69,7 +69,7 @@ func RunWithOptions(r *bufio.Reader, w io.Writer, opts Options) error {
 		lastTime = frameStart
 
 		// ===== INPUT PHASE =====
-		if err := processInput(state, stream); err != nil {
+		if err := processInput(state); err != nil {
 			return err
 		}
 
@@ -106,8 +106,8 @@ func RunWithOptions(r *bufio.Reader, w io.Writer, opts Options) error {
 }
 
 // processInput reads and processes all pending input.
-func processInput(state *State, stream *input.Stream) error {
-	inp := input.ReadInput(stream)
+func processInput(state *State) error {
+	inp := input.ReadInput(state.InputStream)
 
 	state.Input = object.Input{
 		Quit:      inp.Quit,
@@ -159,6 +159,14 @@ func drawFrame(state *State, w io.Writer, canvas *draw.Canvas) error {
 
 	// Draw all objects to canvas
 	for _, obj := range state.Objects {
+		// Skip drawing player when blinking (invincible)
+		if obj == state.Player && state.InvincibleTime > 0 {
+			// Blink at ~10Hz: skip drawing when in "off" phase
+			_, frac := math.Modf(state.InvincibleTime * 10)
+			if frac < 0.5 {
+				continue
+			}
+		}
 		if err := obj.Draw(ctx); err != nil {
 			return err
 		}

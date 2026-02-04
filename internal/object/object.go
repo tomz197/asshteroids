@@ -18,6 +18,7 @@ type UpdateContext struct {
 	Input   Input
 	Screen  Screen
 	Spawner Spawner
+	Objects []Object
 }
 
 // DrawContext provides drawing resources for objects.
