@@ -21,7 +21,10 @@ const (
 type State struct {
 	Objects        []object.Object
 	toSpawn        []object.Object // Objects to add after current update cycle
-	Screen         object.Screen
+	Screen         object.Screen   // Used for update context (world bounds)
+	View           object.Screen   // Viewport dimensions
+	World          object.Screen   // World dimensions (total game area)
+	Camera         object.Camera   // Camera position (follows player)
 	Input          object.Input
 	Delta          time.Duration
 	InputStream    *input.Stream

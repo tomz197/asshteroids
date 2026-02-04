@@ -64,7 +64,7 @@ func checkCollisions(state *State) {
 	// Check projectile-asteroid collisions
 	for _, p := range projectiles {
 		for _, a := range asteroids {
-			if a.Destroyed {
+			if a.Destroyed || a.IsProtected() {
 				continue
 			}
 			if collides(p.X, p.Y, a.X, a.Y, a.GetRadius()) {
@@ -91,7 +91,7 @@ func checkCollisions(state *State) {
 		pr := state.Player.GetRadius()
 
 		for _, a := range asteroids {
-			if a.Destroyed {
+			if a.Destroyed || a.IsProtected() {
 				continue
 			}
 			// Circle-circle collision

@@ -15,11 +15,18 @@ import (
 const targetFPS = 60
 const targetFrameTime = time.Second / targetFPS
 
-// Target resolution - game objects use these logical dimensions.
+// View resolution - the visible viewport in logical units.
 // Actual rendering scales to fit terminal size.
 const (
-	targetWidth  = 120 // Logical width
-	targetHeight = 80  // Logical height (in sub-pixels, so 40 terminal rows)
+	viewWidth  = 120 // Logical viewport width
+	viewHeight = 80  // Logical viewport height (in sub-pixels, so 40 terminal rows)
+)
+
+// World dimensions - the total game area (larger than viewport).
+// Ship stays centered while the camera follows it.
+const (
+	worldWidth  = 400 // Total world width
+	worldHeight = 300 // Total world height
 )
 
 // Options configures the game loop.
@@ -48,17 +55,34 @@ func RunWithOptions(r *bufio.Reader, w io.Writer, opts Options) error {
 	defer draw.ShowCursor(w)
 	draw.ClearScreen(w)
 
-	// Game uses fixed logical resolution
-	state.Screen = object.Screen{
-		Width:   targetWidth,
-		Height:  targetHeight,
-		CenterX: targetWidth / 2,
-		CenterY: targetHeight / 2,
+	// View is the visible viewport
+	state.View = object.Screen{
+		Width:   viewWidth,
+		Height:  viewHeight,
+		CenterX: viewWidth / 2,
+		CenterY: viewHeight / 2,
 	}
 
-	// Create scaled canvas - maps logical coordinates to terminal pixels
+	// World is the full game area (larger, objects wrap here)
+	state.World = object.Screen{
+		Width:   worldWidth,
+		Height:  worldHeight,
+		CenterX: worldWidth / 2,
+		CenterY: worldHeight / 2,
+	}
+
+	// Screen is set to World for object updates (wrapping happens at world edges)
+	state.Screen = state.World
+
+	// Camera starts at world center
+	state.Camera = object.Camera{
+		X: float64(worldWidth) / 2,
+		Y: float64(worldHeight) / 2,
+	}
+
+	// Create scaled canvas - maps logical view coordinates to terminal pixels
 	termWidth, termHeight, _ := draw.TerminalSizeRawWith(termSizeFunc)
-	canvas := draw.NewScaledCanvas(termWidth, termHeight, targetWidth, targetHeight)
+	canvas := draw.NewScaledCanvas(termWidth, termHeight, viewWidth, viewHeight)
 	state.termSizeFunc = termSizeFunc
 
 	lastTime := time.Now()
@@ -85,6 +109,8 @@ func RunWithOptions(r *bufio.Reader, w io.Writer, opts Options) error {
 			if err := updatePlayingState(state); err != nil {
 				return err
 			}
+			// Update camera to follow player
+			updateCamera(state)
 		case GameStateDead:
 			updateDeadState(state)
 		}
@@ -146,15 +172,30 @@ func updateScreen(state *State, canvas *draw.Canvas) error {
 	return nil
 }
 
+// updateCamera updates camera position to follow the player.
+func updateCamera(state *State) {
+	if state.Player == nil {
+		return
+	}
+
+	// Camera follows player directly (centered on player)
+	px, py := state.Player.GetPosition()
+	state.Camera.X = px
+	state.Camera.Y = py
+}
+
 // drawFrame clears the screen and draws all objects.
 func drawFrame(state *State, w io.Writer, canvas *draw.Canvas) error {
 	draw.ClearScreen(w)
 	canvas.Clear()
 
-	// Create draw context
+	// Create draw context with camera info
 	ctx := object.DrawContext{
 		Canvas: canvas,
 		Writer: w,
+		Camera: state.Camera,
+		View:   state.View,
+		World:  state.World,
 	}
 
 	// Draw all objects to canvas

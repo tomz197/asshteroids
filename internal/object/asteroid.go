@@ -31,14 +31,15 @@ var asteroidSpeeds = map[AsteroidSize]float64{
 
 // Asteroid is a destructible space rock.
 type Asteroid struct {
-	X, Y          float64      // Position (center)
-	VX, VY        float64      // Velocity
-	Angle         float64      // Current rotation angle
-	RotationSpeed float64      // Rotation speed (radians/sec)
-	Size          AsteroidSize // Size category
-	Radius        float64      // Collision/draw radius
-	Vertices      []float64    // Vertex distances from center (for irregular shape)
-	Destroyed     bool         // Mark for removal and splitting
+	X, Y            float64      // Position (center)
+	VX, VY          float64      // Velocity
+	Angle           float64      // Current rotation angle
+	RotationSpeed   float64      // Rotation speed (radians/sec)
+	Size            AsteroidSize // Size category
+	Radius          float64      // Collision/draw radius
+	Vertices        []float64    // Vertex distances from center (for irregular shape)
+	Destroyed       bool         // Mark for removal and splitting
+	SpawnProtection float64      // Seconds of invulnerability remaining after spawn
 }
 
 // NewAsteroid creates an asteroid at position (x,y) with the given size.
@@ -107,6 +108,29 @@ func NewAsteroidAtEdge(screen Screen, size AsteroidSize) *Asteroid {
 	return NewAsteroid(x, y, size, angle)
 }
 
+// NewAsteroidRandom creates an asteroid at a random position in the world.
+// The asteroid has spawn protection for the specified duration.
+func NewAsteroidRandom(screen Screen, size AsteroidSize, spawnProtection float64) *Asteroid {
+	w := float64(screen.Width)
+	h := float64(screen.Height)
+
+	// Random position anywhere in the world
+	x := rand.Float64() * w
+	y := rand.Float64() * h
+
+	// Random direction
+	angle := rand.Float64() * 2 * math.Pi
+
+	asteroid := NewAsteroid(x, y, size, angle)
+	asteroid.SpawnProtection = spawnProtection
+	return asteroid
+}
+
+// IsProtected returns true if the asteroid still has spawn protection.
+func (a *Asteroid) IsProtected() bool {
+	return a.SpawnProtection > 0
+}
+
 // Update moves the asteroid and handles rotation.
 func (a *Asteroid) Update(ctx UpdateContext) (bool, error) {
 	if a.Destroyed {
@@ -130,6 +154,14 @@ func (a *Asteroid) Update(ctx UpdateContext) (bool, error) {
 
 	dt := ctx.Delta.Seconds()
 
+	// Decrement spawn protection
+	if a.SpawnProtection > 0 {
+		a.SpawnProtection -= dt
+		if a.SpawnProtection < 0 {
+			a.SpawnProtection = 0
+		}
+	}
+
 	// Rotate
 	a.Angle += a.RotationSpeed * dt
 
@@ -145,6 +177,27 @@ func (a *Asteroid) Update(ctx UpdateContext) (bool, error) {
 
 // Draw renders the asteroid as an irregular polygon.
 func (a *Asteroid) Draw(ctx DrawContext) error {
+	// Blink when protected (skip drawing in "off" phase)
+	if a.SpawnProtection > 0 {
+		// Blink at ~5Hz
+		phase := int(a.SpawnProtection * 5)
+		if phase%2 == 0 {
+			return nil
+		}
+	}
+
+	// Get screen positions (handles world wrapping)
+	positions := WorldToScreen(a.X, a.Y, ctx.Camera, ctx.View, ctx.World)
+
+	for _, pos := range positions {
+		a.drawAt(ctx, pos.X, pos.Y)
+	}
+
+	return nil
+}
+
+// drawAt draws the asteroid at a specific screen position.
+func (a *Asteroid) drawAt(ctx DrawContext, screenX, screenY float64) {
 	numVerts := len(a.Vertices)
 	points := make([]draw.Point, numVerts)
 
@@ -152,14 +205,13 @@ func (a *Asteroid) Draw(ctx DrawContext) error {
 		// Angle for this vertex
 		vertAngle := a.Angle + float64(i)*2*math.Pi/float64(numVerts)
 		points[i] = draw.Point{
-			X: a.X + math.Cos(vertAngle)*dist,
-			Y: a.Y + math.Sin(vertAngle)*dist,
+			X: screenX + math.Cos(vertAngle)*dist,
+			Y: screenY + math.Sin(vertAngle)*dist,
 		}
 	}
 
 	// Draw to canvas (no aspect ratio needed with 2x vertical resolution)
 	ctx.Canvas.DrawPolygon(points, false)
-	return nil
 }
 
 // Hit marks the asteroid as destroyed.

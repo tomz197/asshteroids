@@ -144,7 +144,13 @@ func (p *Particle) Draw(ctx DrawContext) error {
 		// Otherwise use original symbol
 	}
 
-	// Draw to canvas as a single pixel
-	ctx.Canvas.SetFloat(p.X, p.Y)
+	// Get screen positions (handles world wrapping)
+	positions := WorldToScreen(p.X, p.Y, ctx.Camera, ctx.View, ctx.World)
+
+	for _, pos := range positions {
+		// Draw to canvas as a single pixel
+		ctx.Canvas.SetFloat(pos.X, pos.Y)
+	}
+
 	return nil
 }

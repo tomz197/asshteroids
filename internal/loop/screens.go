@@ -61,12 +61,16 @@ func startGame(state *State) {
 		state.Objects = kept
 	}
 
-	state.AddObject(object.NewAsteroidSpawner(30))
+	state.AddObject(object.NewAsteroidSpawner(250))
 
-	// Create player at center
-	player := object.NewUser(float64(targetWidth/2), float64(targetHeight/2))
+	// Create player at world center
+	player := object.NewUser(float64(worldWidth/2), float64(worldHeight/2))
 	state.Player = player
 	state.AddObject(player)
+
+	// Reset camera to follow player
+	state.Camera.X = player.X
+	state.Camera.Y = player.Y
 
 	// Grant invincibility for 3 seconds
 	state.InvincibleTime = 3.0
@@ -85,7 +89,7 @@ func drawUI(state *State, w io.Writer, canvas *draw.Canvas) {
 	case GameStateStart:
 		drawStartScreen(w, centerX, centerY)
 	case GameStatePlaying:
-		drawPlayingHUD(state, w, termWidth)
+		drawPlayingHUD(state, w, termWidth, termHeight)
 	case GameStateDead:
 		drawDeadScreen(state, w, centerX, centerY)
 	}
@@ -106,17 +110,25 @@ func drawStartScreen(w io.Writer, centerX, centerY int) {
 	fmt.Fprint(w, controls)
 }
 
-// drawPlayingHUD draws the in-game HUD (score, lives).
-func drawPlayingHUD(state *State, w io.Writer, termWidth int) {
-	// Score display
+// drawPlayingHUD draws the in-game HUD (score, lives, coordinates).
+func drawPlayingHUD(state *State, w io.Writer, termWidth, termHeight int) {
+	// Score display (top left)
 	scoreText := fmt.Sprintf("Score: %d", state.Score)
 	draw.MoveCursor(w, 2, 1)
 	fmt.Fprint(w, scoreText)
 
-	// Lives display
+	// Lives display (top right)
 	livesText := fmt.Sprintf("Lives: %d", state.Lives)
 	draw.MoveCursor(w, termWidth-len(livesText)-1, 1)
 	fmt.Fprint(w, livesText)
+
+	// Coordinates display (bottom left)
+	if state.Player != nil {
+		px, py := state.Player.GetPosition()
+		coordText := fmt.Sprintf("X:%.0f Y:%.0f", px, py)
+		draw.MoveCursor(w, 2, termHeight)
+		fmt.Fprint(w, coordText)
+	}
 }
 
 // drawDeadScreen draws the death/game over screen.

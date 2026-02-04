@@ -97,6 +97,11 @@ func (c *Canvas) SetFloat(x, y float64) {
 	c.setPixel(px, py)
 }
 
+// SetFloatWithOffset sets a pixel using float logical coordinates with camera offset applied.
+func (c *Canvas) SetFloatWithOffset(x, y, offsetX, offsetY float64) {
+	c.SetFloat(x-offsetX, y-offsetY)
+}
+
 // DrawLine draws a line on the canvas using Bresenham's algorithm.
 // Coordinates are in logical space and get scaled to pixels.
 func (c *Canvas) DrawLine(p1, p2 Point) {
@@ -155,6 +160,21 @@ func (c *Canvas) DrawPolygon(points []Point, filled bool) {
 	for i := 0; i < n; i++ {
 		c.DrawLine(points[i], points[(i+1)%n])
 	}
+}
+
+// DrawPolygonWithOffset draws a polygon with camera offset applied.
+func (c *Canvas) DrawPolygonWithOffset(points []Point, filled bool, offsetX, offsetY float64) {
+	if len(points) < 3 {
+		return
+	}
+
+	// Apply offset to all points
+	offsetPoints := make([]Point, len(points))
+	for i, p := range points {
+		offsetPoints[i] = Point{X: p.X - offsetX, Y: p.Y - offsetY}
+	}
+
+	c.DrawPolygon(offsetPoints, filled)
 }
 
 // fillPolygon fills a polygon using scanline algorithm.

@@ -15,7 +15,10 @@ func NewAsteroidSpawner(target int) *AsteroidSpawner {
 	}
 }
 
-// Update spawns asteroids at the edges when the count drops.
+// SpawnProtectionTime is how long new asteroids are invulnerable.
+const SpawnProtectionTime = 3.0
+
+// Update spawns asteroids at random positions when the count drops.
 func (s *AsteroidSpawner) Update(ctx UpdateContext) (bool, error) {
 	if s.target == 0 {
 		return false, nil
@@ -28,13 +31,13 @@ func (s *AsteroidSpawner) Update(ctx UpdateContext) (bool, error) {
 
 	for s.target-count >= 12 {
 		count += 4
-		asteroid := NewAsteroidAtEdge(ctx.Screen, AsteroidLarge)
+		asteroid := NewAsteroidRandom(ctx.Screen, AsteroidLarge, SpawnProtectionTime)
 		ctx.Spawner.Spawn(asteroid)
 		count += 4
-		asteroid = NewAsteroidAtEdge(ctx.Screen, AsteroidLarge)
+		asteroid = NewAsteroidRandom(ctx.Screen, AsteroidLarge, SpawnProtectionTime)
 		ctx.Spawner.Spawn(asteroid)
 		count += 4
-		asteroid = NewAsteroidAtEdge(ctx.Screen, AsteroidLarge)
+		asteroid = NewAsteroidRandom(ctx.Screen, AsteroidLarge, SpawnProtectionTime)
 		ctx.Spawner.Spawn(asteroid)
 	}
 	return false, nil

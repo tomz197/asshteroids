@@ -109,6 +109,18 @@ func (u *User) Update(ctx UpdateContext) (bool, error) {
 
 // Draw renders the spaceship as a triangle pointing in the direction of travel.
 func (u *User) Draw(ctx DrawContext) error {
+	// Get screen positions (handles world wrapping)
+	positions := WorldToScreen(u.X, u.Y, ctx.Camera, ctx.View, ctx.World)
+
+	for _, pos := range positions {
+		u.drawAt(ctx, pos.X, pos.Y)
+	}
+
+	return nil
+}
+
+// drawAt draws the ship at a specific screen position.
+func (u *User) drawAt(ctx DrawContext, screenX, screenY float64) {
 	// Triangle vertices relative to center:
 	// - Nose (front): in the direction of Angle
 	// - Left wing: 140° from nose
@@ -119,17 +131,15 @@ func (u *User) Draw(ctx DrawContext) error {
 
 	size := u.Size
 
-	// Calculate vertex positions (canvas has 2x vertical resolution, so no aspect ratio needed)
+	// Calculate vertex positions in screen space
 	triangle := []draw.Point{
-		{X: u.X + math.Cos(noseAngle)*size, Y: u.Y + math.Sin(noseAngle)*size},
-		{X: u.X + math.Cos(leftAngle)*size*0.7, Y: u.Y + math.Sin(leftAngle)*size*0.7},
-		{X: u.X + math.Cos(rightAngle)*size*0.7, Y: u.Y + math.Sin(rightAngle)*size*0.7},
+		{X: screenX + math.Cos(noseAngle)*size, Y: screenY + math.Sin(noseAngle)*size},
+		{X: screenX + math.Cos(leftAngle)*size*0.7, Y: screenY + math.Sin(leftAngle)*size*0.7},
+		{X: screenX + math.Cos(rightAngle)*size*0.7, Y: screenY + math.Sin(rightAngle)*size*0.7},
 	}
 
 	// Draw the triangle to canvas
 	ctx.Canvas.DrawPolygon(triangle, true)
-
-	return nil
 }
 
 // GetPosition returns the ship's center position.

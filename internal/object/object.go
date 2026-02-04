@@ -21,10 +21,18 @@ type UpdateContext struct {
 	Objects []Object
 }
 
+// Camera represents the viewport position in world space.
+type Camera struct {
+	X, Y float64 // Camera center position in world coordinates
+}
+
 // DrawContext provides drawing resources for objects.
 type DrawContext struct {
 	Canvas *draw.Canvas // High-resolution canvas (2x vertical)
 	Writer io.Writer    // Direct terminal output (for text/particles)
+	Camera Camera       // Camera position for viewport offset
+	View   Screen       // Viewport dimensions (what the camera sees)
+	World  Screen       // World dimensions (total game area)
 }
 
 // Input represents the current input state.
@@ -59,19 +67,58 @@ func (s Screen) WrapPosition(x, y *float64) {
 	h := float64(s.Height)
 
 	if w > 0 {
-		if *x < 0 {
+		for *x < 0 {
 			*x += w
-		} else if *x > w {
+		}
+		for *x > w {
 			*x -= w
 		}
 	}
 	if h > 0 {
-		if *y < 0 {
+		for *y < 0 {
 			*y += h
-		} else if *y > h {
+		}
+		for *y > h {
 			*y -= h
 		}
 	}
+}
+
+// WorldToScreen converts world coordinates to screen coordinates relative to camera.
+// Returns the screen position and whether the object is visible in the viewport.
+// Also handles wrapping - returns multiple positions if object spans world edge.
+func WorldToScreen(worldX, worldY float64, cam Camera, view, world Screen) []struct{ X, Y float64 } {
+	viewW := float64(view.Width)
+	viewH := float64(view.Height)
+	worldW := float64(world.Width)
+	worldH := float64(world.Height)
+
+	// Camera position is the center of the view
+	camLeft := cam.X - viewW/2
+	camTop := cam.Y - viewH/2
+
+	// Calculate screen position
+	screenX := worldX - camLeft
+	screenY := worldY - camTop
+
+	// Wrap the offset to handle world wrapping
+	positions := []struct{ X, Y float64 }{}
+
+	// Check all possible wrap positions (original + wrapped copies)
+	for dx := -1; dx <= 1; dx++ {
+		for dy := -1; dy <= 1; dy++ {
+			sx := screenX + float64(dx)*worldW
+			sy := screenY + float64(dy)*worldH
+
+			// Check if this position is within the view (with some margin for large objects)
+			margin := 10.0
+			if sx >= -margin && sx <= viewW+margin && sy >= -margin && sy <= viewH+margin {
+				positions = append(positions, struct{ X, Y float64 }{sx, sy})
+			}
+		}
+	}
+
+	return positions
 }
 
 // Object is a drawable and updatable game entity.
