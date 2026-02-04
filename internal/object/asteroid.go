@@ -1,7 +1,6 @@
 package object
 
 import (
-	"io"
 	"math"
 	"math/rand"
 
@@ -145,10 +144,7 @@ func (a *Asteroid) Update(ctx UpdateContext) (bool, error) {
 }
 
 // Draw renders the asteroid as an irregular polygon.
-func (a *Asteroid) Draw(w io.Writer) error {
-	// Terminal aspect ratio compensation
-	const aspectRatio = 2.0
-
+func (a *Asteroid) Draw(ctx DrawContext) error {
 	numVerts := len(a.Vertices)
 	points := make([]draw.Point, numVerts)
 
@@ -156,12 +152,13 @@ func (a *Asteroid) Draw(w io.Writer) error {
 		// Angle for this vertex
 		vertAngle := a.Angle + float64(i)*2*math.Pi/float64(numVerts)
 		points[i] = draw.Point{
-			X: a.X + math.Cos(vertAngle)*dist*aspectRatio,
+			X: a.X + math.Cos(vertAngle)*dist,
 			Y: a.Y + math.Sin(vertAngle)*dist,
 		}
 	}
 
-	draw.DrawPolygon(w, points, draw.BlockFull, false)
+	// Draw to canvas (no aspect ratio needed with 2x vertical resolution)
+	ctx.Canvas.DrawPolygon(points, false)
 	return nil
 }
 

@@ -1,11 +1,8 @@
 package object
 
 import (
-	"io"
 	"math"
 	"math/rand"
-
-	"github.com/tomz197/asteroids/internal/draw"
 )
 
 // Particle is a short-lived visual effect.
@@ -136,29 +133,18 @@ func (p *Particle) Update(ctx UpdateContext) (bool, error) {
 	return false, nil
 }
 
-// Draw renders the particle, potentially fading based on remaining lifetime.
-func (p *Particle) Draw(w io.Writer) error {
-	x := int(math.Round(p.X))
-	y := int(math.Round(p.Y))
-
-	// Skip if off-screen
-	if x < 1 || y < 1 {
-		return nil
-	}
-
-	symbol := p.Symbol
-
-	// Fade effect: change symbol based on lifetime remaining
+// Draw renders the particle as a pixel on the canvas.
+func (p *Particle) Draw(ctx DrawContext) error {
+	// Skip faded particles (< 25% lifetime)
 	if p.Fade && p.MaxLifetime > 0 {
 		ratio := p.Lifetime / p.MaxLifetime
 		if ratio < 0.25 {
-			symbol = '.' // Faintest
-		} else if ratio < 0.5 {
-			symbol = '*'
+			return nil
 		}
 		// Otherwise use original symbol
 	}
 
-	draw.DrawChar(w, x, y, symbol)
+	// Draw to canvas as a single pixel
+	ctx.Canvas.SetFloat(p.X, p.Y)
 	return nil
 }

@@ -1,10 +1,7 @@
 package object
 
 import (
-	"io"
 	"math"
-
-	"github.com/tomz197/asteroids/internal/draw"
 )
 
 // Projectile is a bullet fired by the player.
@@ -55,9 +52,8 @@ func (p *Projectile) Update(ctx UpdateContext) (bool, error) {
 }
 
 // Draw renders the projectile.
-func (p *Projectile) Draw(w io.Writer) error {
-	x := int(math.Round(p.X))
-	y := int(math.Round(p.Y))
-	draw.DrawChar(w, x, y, p.Symbol)
+func (p *Projectile) Draw(ctx DrawContext) error {
+	// Draw to canvas as a single pixel
+	ctx.Canvas.SetFloat(p.X, p.Y)
 	return nil
 }

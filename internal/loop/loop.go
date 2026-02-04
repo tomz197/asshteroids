@@ -15,6 +15,13 @@ const targetFPS = 60
 const targetFrameTime = time.Second / targetFPS
 const initialAsteroids = 4
 
+// Target resolution - game objects use these logical dimensions.
+// Actual rendering scales to fit terminal size.
+const (
+	targetWidth  = 120 // Logical width
+	targetHeight = 80  // Logical height (in sub-pixels, so 40 terminal rows)
+)
+
 // Run starts the main game loop with the standard Input → Update → Draw cycle.
 func Run(r *bufio.Reader, w io.Writer) error {
 	state := NewState()
@@ -24,19 +31,19 @@ func Run(r *bufio.Reader, w io.Writer) error {
 	defer draw.ShowCursor(w)
 	draw.ClearScreen(w)
 
-	// Get initial screen size and spawn user at center
-	screen, err := draw.TerminalSize()
-	if err != nil {
-		return err
-	}
+	// Game uses fixed logical resolution
 	state.Screen = object.Screen{
-		Width:   screen.Width,
-		Height:  screen.Height,
-		CenterX: screen.CenterX,
-		CenterY: screen.CenterY,
+		Width:   targetWidth,
+		Height:  targetHeight,
+		CenterX: targetWidth / 2,
+		CenterY: targetHeight / 2,
 	}
 
-	user := object.NewUser(float64(screen.CenterX), float64(screen.CenterY))
+	// Create scaled canvas - maps logical coordinates to terminal pixels
+	termWidth, termHeight, _ := draw.TerminalSizeRaw()
+	canvas := draw.NewScaledCanvas(termWidth, termHeight, targetWidth, targetHeight)
+
+	user := object.NewUser(float64(targetWidth/2), float64(targetHeight/2))
 	state.AddObject(user)
 
 	// Spawn initial asteroids
@@ -58,7 +65,7 @@ func Run(r *bufio.Reader, w io.Writer) error {
 		}
 
 		// ===== UPDATE PHASE =====
-		if err := updateScreen(state); err != nil {
+		if err := updateScreen(state, canvas); err != nil {
 			return err
 		}
 		if err := updateObjects(state); err != nil {
@@ -69,7 +76,7 @@ func Run(r *bufio.Reader, w io.Writer) error {
 		checkCollisions(state)
 
 		// ===== DRAW PHASE =====
-		if err := drawFrame(state, w); err != nil {
+		if err := drawFrame(state, w, canvas); err != nil {
 			return err
 		}
 
@@ -92,6 +99,8 @@ func processInput(state *State, stream *input.Stream) error {
 		Quit:      inp.Quit,
 		Left:      inp.Left,
 		Right:     inp.Right,
+		UpLeft:    inp.UpLeft,
+		UpRight:   inp.UpRight,
 		Up:        inp.Up,
 		Down:      inp.Down,
 		Space:     inp.Space,
@@ -110,18 +119,20 @@ func processInput(state *State, stream *input.Stream) error {
 	return nil
 }
 
-// updateScreen fetches the current terminal size.
-func updateScreen(state *State) error {
-	screen, err := draw.TerminalSize()
+// updateScreen checks for terminal resize and updates canvas scaling.
+// Logical screen dimensions stay fixed at target resolution.
+func updateScreen(state *State, canvas *draw.Canvas) error {
+	termWidth, termHeight, err := draw.TerminalSizeRaw()
 	if err != nil {
 		return err
 	}
-	state.Screen = object.Screen{
-		Width:   screen.Width,
-		Height:  screen.Height,
-		CenterX: screen.CenterX,
-		CenterY: screen.CenterY,
-	}
+
+	// Resize canvas if terminal changed (updates scaling)
+	canvas.Resize(termWidth, termHeight)
+
+	// Logical dimensions stay constant
+	// state.Screen is already set to target resolution
+
 	return nil
 }
 
@@ -149,14 +160,25 @@ func updateObjects(state *State) error {
 }
 
 // drawFrame clears the screen and draws all objects.
-func drawFrame(state *State, w io.Writer) error {
+func drawFrame(state *State, w io.Writer, canvas *draw.Canvas) error {
 	draw.ClearScreen(w)
+	canvas.Clear()
 
+	// Create draw context
+	ctx := object.DrawContext{
+		Canvas: canvas,
+		Writer: w,
+	}
+
+	// Draw all objects to canvas
 	for _, obj := range state.Objects {
-		if err := obj.Draw(w); err != nil {
+		if err := obj.Draw(ctx); err != nil {
 			return err
 		}
 	}
+
+	// Render canvas to terminal
+	canvas.Render(w)
 
 	return nil
 }

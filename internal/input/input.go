@@ -6,15 +6,15 @@ import (
 )
 
 // keyHoldDuration is how long a key is considered "held" after its last press.
-// This allows detecting simultaneous key combinations in terminal input.
 const keyHoldDuration = 30 * time.Millisecond
 
 // Input represents the current frame's input state.
-// Multiple keys can be pressed simultaneously.
 type Input struct {
 	Quit      bool
 	Left      bool
 	Right     bool
+	UpLeft    bool
+	UpRight   bool
 	Up        bool
 	Down      bool
 	Space     bool
@@ -31,6 +31,8 @@ type keyState struct {
 	quit      time.Time
 	left      time.Time
 	right     time.Time
+	upLeft    time.Time
+	upRight   time.Time
 	up        time.Time
 	down      time.Time
 	space     time.Time
@@ -124,6 +126,8 @@ parse:
 		Quit:      now.Sub(s.state.quit) < keyHoldDuration,
 		Left:      now.Sub(s.state.left) < keyHoldDuration,
 		Right:     now.Sub(s.state.right) < keyHoldDuration,
+		UpLeft:    now.Sub(s.state.upLeft) < keyHoldDuration,
+		UpRight:   now.Sub(s.state.upRight) < keyHoldDuration,
 		Up:        now.Sub(s.state.up) < keyHoldDuration,
 		Down:      now.Sub(s.state.down) < keyHoldDuration,
 		Space:     now.Sub(s.state.space) < keyHoldDuration,
@@ -148,14 +152,18 @@ func applyByteToState(state *keyState, b byte, now time.Time) {
 	switch b {
 	case 'q', 'Q':
 		state.quit = now
-	case 'a', 'A':
+	case 'a', 'A', 'j', 'J':
 		state.left = now
-	case 'd', 'D':
+	case 'd', 'D', 'l', 'L':
 		state.right = now
-	case 'w', 'W':
+	case 'w', 'W', 'i', 'I':
 		state.up = now
-	case 's', 'S':
+	case 's', 'S', 'k', 'K':
 		state.down = now
+	case 'u', 'U':
+		state.upLeft = now
+	case 'o', 'O':
+		state.upRight = now
 	case ' ':
 		state.space = now
 	case '\n', '\r':

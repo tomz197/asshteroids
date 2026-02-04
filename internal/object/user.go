@@ -1,7 +1,6 @@
 package object
 
 import (
-	"io"
 	"math"
 
 	"github.com/tomz197/asteroids/internal/draw"
@@ -34,7 +33,7 @@ func NewUser(x, y float64) *User {
 		RotationSpeed: 5.0,          // ~286 degrees per second
 		MaxSpeed:      25.0,         // Max speed cap
 		Drag:          0.5,          // Lose 50% speed per second when not thrusting
-		Size:          2.0,          // Triangle size
+		Size:          3.0,          // Triangle size
 		FireRate:      0.15,         // 6-7 shots per second max
 	}
 }
@@ -44,10 +43,10 @@ func (u *User) Update(ctx UpdateContext) (bool, error) {
 	dt := ctx.Delta.Seconds()
 
 	// Rotation (left/right)
-	if ctx.Input.Left {
+	if ctx.Input.Left || ctx.Input.UpLeft {
 		u.Angle -= u.RotationSpeed * dt
 	}
-	if ctx.Input.Right {
+	if ctx.Input.Right || ctx.Input.UpRight {
 		u.Angle += u.RotationSpeed * dt
 	}
 
@@ -60,13 +59,12 @@ func (u *User) Update(ctx UpdateContext) (bool, error) {
 	}
 
 	// Thrust (accelerate in facing direction)
-	if ctx.Input.Up {
+	if ctx.Input.Up || ctx.Input.UpLeft || ctx.Input.UpRight {
 		u.VX += math.Cos(u.Angle) * u.ThrustPower * dt
 		u.VY += math.Sin(u.Angle) * u.ThrustPower * dt
 
 		// Spawn thrust particles from the back of the ship
-		const aspectRatio = 2.0
-		backX := u.X - math.Cos(u.Angle)*u.Size*aspectRatio*0.5
+		backX := u.X - math.Cos(u.Angle)*u.Size*0.5
 		backY := u.Y - math.Sin(u.Angle)*u.Size*0.5
 		SpawnThrust(backX, backY, u.Angle, ctx.Spawner)
 	}
@@ -99,8 +97,7 @@ func (u *User) Update(ctx UpdateContext) (bool, error) {
 		u.fireCooldown = u.FireRate
 
 		// Spawn projectile from the nose of the ship
-		const aspectRatio = 2.0
-		noseX := u.X + math.Cos(u.Angle)*u.Size*aspectRatio
+		noseX := u.X + math.Cos(u.Angle)*u.Size
 		noseY := u.Y + math.Sin(u.Angle)*u.Size
 
 		projectile := NewProjectile(noseX, noseY, u.Angle, u.VX, u.VY)
@@ -111,10 +108,7 @@ func (u *User) Update(ctx UpdateContext) (bool, error) {
 }
 
 // Draw renders the spaceship as a triangle pointing in the direction of travel.
-func (u *User) Draw(w io.Writer) error {
-	// Terminal characters are roughly 2:1 (height:width), so we adjust X coordinates
-	const aspectRatio = 2.0
-
+func (u *User) Draw(ctx DrawContext) error {
 	// Triangle vertices relative to center:
 	// - Nose (front): in the direction of Angle
 	// - Left wing: 140° from nose
@@ -125,15 +119,15 @@ func (u *User) Draw(w io.Writer) error {
 
 	size := u.Size
 
-	// Calculate vertex positions (adjust X for terminal aspect ratio)
+	// Calculate vertex positions (canvas has 2x vertical resolution, so no aspect ratio needed)
 	triangle := []draw.Point{
-		{X: u.X + math.Cos(noseAngle)*size*aspectRatio, Y: u.Y + math.Sin(noseAngle)*size},
-		{X: u.X + math.Cos(leftAngle)*size*0.7*aspectRatio, Y: u.Y + math.Sin(leftAngle)*size*0.7},
-		{X: u.X + math.Cos(rightAngle)*size*0.7*aspectRatio, Y: u.Y + math.Sin(rightAngle)*size*0.7},
+		{X: u.X + math.Cos(noseAngle)*size, Y: u.Y + math.Sin(noseAngle)*size},
+		{X: u.X + math.Cos(leftAngle)*size*0.7, Y: u.Y + math.Sin(leftAngle)*size*0.7},
+		{X: u.X + math.Cos(rightAngle)*size*0.7, Y: u.Y + math.Sin(rightAngle)*size*0.7},
 	}
 
-	// Draw the triangle
-	draw.DrawPolygon(w, triangle, draw.BlockFull, true)
+	// Draw the triangle to canvas
+	ctx.Canvas.DrawPolygon(triangle, true)
 
 	return nil
 }
