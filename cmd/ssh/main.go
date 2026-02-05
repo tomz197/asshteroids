@@ -55,6 +55,13 @@ func main() {
 			activeterm.Middleware(),
 			logging.Middleware(),
 		),
+		// Set TCP_NODELAY to reduce latency for game input
+		ssh.WrapConn(func(ctx ssh.Context, conn net.Conn) net.Conn {
+			if tcpConn, ok := conn.(*net.TCPConn); ok {
+				_ = tcpConn.SetNoDelay(true)
+			}
+			return conn
+		}),
 	}
 
 	if hostKeyPath != "" {

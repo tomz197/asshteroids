@@ -20,9 +20,11 @@ primary_region = 'fra'
   auto_stop_machines = "stop"
   auto_start_machines = true
   auto_stop_timeout = "1m"
+  processes = ['app']
+
+[scale]
   min_machines_running = 0
   max_machines_running = 1
-  processes = ['app']
 
 [http_service.concurrency]
   type = "connections"
