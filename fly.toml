@@ -9,7 +9,9 @@ primary_region = 'fra'
 [build]
 
 [env]
+  SSH_HOST = "::"
   SSH_PORT = "2222"
+  SSH_HOST_KEY = "/app/keys/host_key"
 
 # HTTP service for web interface
 [http_service]

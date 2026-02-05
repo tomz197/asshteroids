@@ -37,7 +37,7 @@ COPY scripts/start.sh /app/start.sh
 
 # Create directory for host keys and make script executable
 RUN chmod +x /app/start.sh && \
-    mkdir -p /app/keys && chown asteroids:asteroids /app/keys
+    mkdir -p /app/keys && chown -R asteroids:asteroids /app
 
 # Switch to non-root user
 USER asteroids
@@ -49,6 +49,7 @@ EXPOSE 8080
 # Environment variables for configuration
 ENV SSH_HOST=0.0.0.0
 ENV SSH_PORT=2222
+ENV SSH_HOST_KEY=/app/keys/host_key
 ENV WEB_HOST=0.0.0.0
 ENV WEB_PORT=8080
 ENV SSH_DISPLAY_HOST=localhost

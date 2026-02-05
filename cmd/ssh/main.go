@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -21,8 +22,9 @@ import (
 )
 
 const (
-	defaultHost = "0.0.0.0"
-	defaultPort = "22"
+	defaultHost        = "::"
+	defaultPort        = "2222"
+	defaultHostKeyPath = "/app/keys/host_key"
 )
 
 // Global game server - shared by all SSH clients
@@ -32,7 +34,12 @@ var serverOnce sync.Once
 func main() {
 	host := getEnv("SSH_HOST", defaultHost)
 	port := getEnv("SSH_PORT", defaultPort)
-	hostKeyPath := getEnv("SSH_HOST_KEY", "")
+	hostKeyPath := getEnv("SSH_HOST_KEY", defaultHostKeyPath)
+	workingDir, workErr := os.Getwd()
+	if workErr != nil {
+		log.Printf("Failed to get working directory: %v", workErr)
+	}
+	log.Printf("SSH config: host=%s port=%s hostKeyPath=%s workingDir=%s", host, port, hostKeyPath, workingDir)
 
 	// Initialize and start the shared game server
 	serverOnce.Do(func() {
@@ -42,7 +49,7 @@ func main() {
 	})
 
 	opts := []ssh.Option{
-		wish.WithAddress(fmt.Sprintf("%s:%s", host, port)),
+		wish.WithAddress(net.JoinHostPort(host, port)),
 		wish.WithMiddleware(
 			gameMiddleware,
 			activeterm.Middleware(),
