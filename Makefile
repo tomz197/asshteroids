@@ -1,10 +1,11 @@
 APP_NAME=game
 SSH_NAME=asteroids-ssh
+WEB_NAME=asteroids-web
 BIN_DIR=bin
 DOCKER_IMAGE=asteroids-ssh
 DOCKER_TAG=latest
 
-.PHONY: build build-ssh run run-ssh clean fmt docker-build docker-run docker-stop
+.PHONY: build build-ssh build-web run run-ssh run-web clean fmt docker-build docker-run docker-stop
 
 # Local builds
 build:
@@ -15,12 +16,19 @@ build-ssh:
 	mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/$(SSH_NAME) ./cmd/ssh
 
+build-web:
+	mkdir -p $(BIN_DIR)
+	go build -o $(BIN_DIR)/$(WEB_NAME) ./cmd/web
+
 # Local run
 run:
 	go run ./cmd/game
 
 run-ssh:
 	go run ./cmd/ssh
+
+run-web:
+	go run ./cmd/web
 
 fmt:
 	go fmt ./...

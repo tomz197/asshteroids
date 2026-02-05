@@ -1,15 +1,19 @@
 services:
   asteroids:
     build: .
-    container_name: asteroids-ssh
+    container_name: asteroids
     ports:
       - "22:22"
+      - "8080:8080"
     volumes:
       - asteroids-keys:/app/keys
     environment:
       - SSH_HOST=0.0.0.0
       - SSH_PORT=22
       - SSH_HOST_KEY=/app/keys/host_key
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=8080
+      - SSH_DISPLAY_HOST=localhost
     restart: unless-stopped
 
 volumes:
