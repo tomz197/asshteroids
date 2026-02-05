@@ -9,14 +9,14 @@ import (
 	"github.com/tomz197/asteroids/internal/object"
 )
 
-// updateStartState handles the start screen state.
+// updateStartState handles the start screen state (legacy single-player).
 func updateStartState(state *State) {
 	if state.Input.Space || state.Input.Enter {
 		startGame(state)
 	}
 }
 
-// updateDeadState handles the death screen state.
+// updateDeadState handles the death screen state (legacy single-player).
 func updateDeadState(state *State) {
 	// Update particles for death explosion effect
 	ctx := state.UpdateContext()
@@ -40,7 +40,7 @@ func updateDeadState(state *State) {
 	}
 }
 
-// startGame initializes a new game or respawns player.
+// startGame initializes a new game or respawns player (legacy single-player).
 func startGame(state *State) {
 	input.ResetKeyInput(state.InputStream)
 	if state.GameState == GameStateStart || state.Lives <= 0 {
@@ -78,7 +78,7 @@ func startGame(state *State) {
 	state.GameState = GameStatePlaying
 }
 
-// drawUI draws the game UI overlay.
+// drawUI draws the game UI overlay (legacy single-player).
 func drawUI(state *State, w io.Writer, canvas *draw.Canvas) {
 	termWidth := canvas.TerminalWidth()
 	termHeight := canvas.TerminalHeight()

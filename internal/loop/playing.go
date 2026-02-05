@@ -5,7 +5,7 @@ import (
 	"github.com/tomz197/asteroids/internal/physics"
 )
 
-// updatePlayingState handles the playing game state.
+// updatePlayingState handles the playing game state (legacy single-player).
 func updatePlayingState(state *State) error {
 	// Decrement invincibility timer
 	if state.InvincibleTime > 0 {
@@ -61,7 +61,7 @@ func collectCollidables(objects []object.Object) ([]*object.Projectile, []*objec
 	return projectiles, asteroids
 }
 
-// checkCollisions detects and handles all collisions between objects.
+// checkCollisions detects and handles all collisions between objects (legacy single-player).
 func checkCollisions(state *State) {
 	projectiles, asteroids := collectCollidables(state.Objects)
 
@@ -152,7 +152,7 @@ func checkAsteroidAsteroidCollisions(asteroids []*object.Asteroid) {
 }
 
 // checkPlayerCollisions checks if the player collides with projectiles or asteroids.
-// Returns true if the player was killed.
+// Returns true if the player was killed. (Legacy single-player)
 func checkPlayerCollisions(state *State, projectiles []*object.Projectile, asteroids []*object.Asteroid) bool {
 	px, py := state.Player.GetPosition()
 	pr := state.Player.GetRadius()
@@ -183,7 +183,7 @@ func checkPlayerCollisions(state *State, projectiles []*object.Projectile, aster
 	return false
 }
 
-// killPlayer handles player death.
+// killPlayer handles player death (legacy single-player).
 func killPlayer(state *State) {
 	if state.Player == nil {
 		return
@@ -191,7 +191,7 @@ func killPlayer(state *State) {
 
 	// Spawn death explosion
 	x, y := state.Player.GetPosition()
-	object.SpawnExplosion(x, y, 20, 25.0, 1.0, state)
+	object.SpawnExplosion(x, y, 20, 25.0, 1.0, &state.WorldState)
 
 	// Remove player from objects
 	kept := state.Objects[:0]

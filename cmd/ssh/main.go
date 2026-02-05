@@ -25,10 +25,21 @@ const (
 	defaultPort = "22"
 )
 
+// Global game server - shared by all SSH clients
+var gameServer *loop.Server
+var serverOnce sync.Once
+
 func main() {
 	host := getEnv("SSH_HOST", defaultHost)
 	port := getEnv("SSH_PORT", defaultPort)
 	hostKeyPath := getEnv("SSH_HOST_KEY", "")
+
+	// Initialize and start the shared game server
+	serverOnce.Do(func() {
+		gameServer = loop.NewServer()
+		go gameServer.Run()
+		log.Println("Game server started")
+	})
 
 	opts := []ssh.Option{
 		wish.WithAddress(fmt.Sprintf("%s:%s", host, port)),
@@ -61,6 +72,11 @@ func main() {
 	<-done
 	log.Println("Shutting down server...")
 
+	// Stop the game server
+	if gameServer != nil {
+		gameServer.Stop()
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -69,7 +85,7 @@ func main() {
 	}
 }
 
-// gameMiddleware handles SSH sessions and runs the game.
+// gameMiddleware handles SSH sessions and runs the game client.
 func gameMiddleware(next ssh.Handler) ssh.Handler {
 	return func(sess ssh.Session) {
 		pty, winCh, ok := sess.Pty()
@@ -92,11 +108,13 @@ func gameMiddleware(next ssh.Handler) ssh.Handler {
 		}()
 
 		reader := bufio.NewReader(sess)
-		opts := loop.Options{
+		clientOpts := loop.ClientOptions{
 			TermSizeFunc: sizeTracker.getSize,
 		}
 
-		if err := loop.RunWithOptions(reader, sess, opts); err != nil {
+		// Create a new client connected to the shared game server
+		client := loop.NewClient(gameServer, reader, sess, clientOpts)
+		if err := client.Run(); err != nil {
 			log.Printf("Game error for %s: %v", sess.User(), err)
 		}
 

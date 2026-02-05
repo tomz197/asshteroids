@@ -18,44 +18,43 @@ const (
 )
 
 // WorldState holds shared game state (objects, world bounds, timing).
-// This is shared across all clients in a multiplayer scenario.
+// This is managed by the Server and shared across all clients via snapshots.
 type WorldState struct {
 	Objects []object.Object
 	toSpawn []object.Object // Objects to add after current update cycle
 	Screen  object.Screen   // Used for update context (world bounds)
 	World   object.Screen   // World dimensions (total game area)
 	Delta   time.Duration   // Frame delta time
-	Running bool            // Game loop running
 }
 
 // ClientState holds per-player state (input, score, camera, etc.).
-// Each player/client has their own instance.
+// Each client has their own instance, managed by the Client.
 type ClientState struct {
 	Input          object.Input
-	InputStream    *input.Stream
 	View           object.Screen     // Viewport dimensions (can vary per client)
 	Camera         object.Camera     // Camera position (follows this client's player)
 	GameState      GameState         // This client's game phase
-	Player         *object.User      // Reference to this client's ship
+	Player         *object.User      // Reference to this client's ship (from server)
 	Score          int               // This client's score
 	Lives          int               // This client's remaining lives
 	InvincibleTime float64           // Remaining invincibility time in seconds
 	termSizeFunc   draw.TermSizeFunc // Function to get terminal size
+	Running        bool              // Client loop running
+	delta          time.Duration     // Frame delta time (client-side)
 }
 
-// State holds all game state, combining world and client state.
-// For single-player, this contains one ClientState.
-// For future multiplayer, WorldState would be shared while each client has its own ClientState.
+// State holds all game state for single-player backward compatibility.
+// Combines WorldState and ClientState for the legacy single-threaded loop.
 type State struct {
 	WorldState
 	ClientState
+	InputStream *input.Stream // Input stream (legacy single-player only)
 }
 
 // NewWorldState creates a new initialized world state.
 func NewWorldState() *WorldState {
 	return &WorldState{
 		Objects: []object.Object{},
-		Running: true,
 	}
 }
 
@@ -64,10 +63,12 @@ func NewClientState() *ClientState {
 	return &ClientState{
 		GameState: GameStateStart,
 		Lives:     InitialLives,
+		Running:   true,
 	}
 }
 
 // NewState creates a new initialized game state (world + single client).
+// Used for backward-compatible single-player mode.
 func NewState() *State {
 	return &State{
 		WorldState:  *NewWorldState(),
@@ -93,10 +94,10 @@ func (w *WorldState) FlushSpawned() {
 }
 
 // UpdateContext creates an UpdateContext from the current state.
-// Uses the client's input but the world's objects and bounds.
+// Used for single-player backward compatibility.
 func (s *State) UpdateContext() object.UpdateContext {
 	return object.UpdateContext{
-		Delta:   s.Delta,
+		Delta:   s.WorldState.Delta,
 		Input:   s.Input,
 		Screen:  s.Screen,
 		Spawner: &s.WorldState,

@@ -36,11 +36,13 @@ type Options struct {
 
 // Run starts the main game loop with the standard Input → Update → Draw cycle.
 // Uses default terminal size detection from os.Stdout.
+// This is the legacy single-threaded mode for backward compatibility.
 func Run(r *bufio.Reader, w io.Writer) error {
 	return RunWithOptions(r, w, Options{})
 }
 
 // RunWithOptions starts the game loop with custom options.
+// This is the legacy single-threaded mode for backward compatibility.
 func RunWithOptions(r *bufio.Reader, w io.Writer, opts Options) error {
 	termSizeFunc := opts.TermSizeFunc
 	if termSizeFunc == nil {
@@ -88,7 +90,7 @@ func RunWithOptions(r *bufio.Reader, w io.Writer, opts Options) error {
 
 	for state.Running {
 		frameStart := time.Now()
-		state.Delta = frameStart.Sub(lastTime)
+		state.WorldState.Delta = frameStart.Sub(lastTime)
 		lastTime = frameStart
 
 		// ===== INPUT PHASE =====
@@ -130,7 +132,28 @@ func RunWithOptions(r *bufio.Reader, w io.Writer, opts Options) error {
 	return nil
 }
 
-// processInput reads and processes all pending input.
+// RunClientServer starts the game in client-server mode.
+// The server runs in a separate goroutine and the client runs in the calling goroutine.
+// This is the recommended mode for multiplayer support.
+func RunClientServer(r *bufio.Reader, w io.Writer, opts Options) error {
+	termSizeFunc := opts.TermSizeFunc
+	if termSizeFunc == nil {
+		termSizeFunc = draw.DefaultTermSizeFunc
+	}
+
+	// Create and start server
+	server := NewServer()
+	go server.Run()
+	defer server.Stop()
+
+	// Create and run client
+	client := NewClient(server, r, w, ClientOptions{
+		TermSizeFunc: termSizeFunc,
+	})
+	return client.Run()
+}
+
+// processInput reads and processes all pending input (legacy single-player).
 func processInput(state *State) error {
 	state.Input = input.ReadInput(state.InputStream)
 
@@ -141,7 +164,7 @@ func processInput(state *State) error {
 	return nil
 }
 
-// updateScreen checks for terminal resize and updates canvas scaling.
+// updateScreen checks for terminal resize and updates canvas scaling (legacy single-player).
 func updateScreen(state *State, canvas *draw.Canvas) error {
 	termWidth, termHeight, err := draw.TerminalSizeRawWith(state.termSizeFunc)
 	if err != nil {
@@ -154,7 +177,7 @@ func updateScreen(state *State, canvas *draw.Canvas) error {
 	return nil
 }
 
-// updateCamera updates camera position to follow the player.
+// updateCamera updates camera position to follow the player (legacy single-player).
 func updateCamera(state *State) {
 	if state.Player == nil {
 		return
@@ -166,7 +189,7 @@ func updateCamera(state *State) {
 	state.Camera.Y = py
 }
 
-// drawFrame clears the screen and draws all objects.
+// drawFrame clears the screen and draws all objects (legacy single-player).
 func drawFrame(state *State, w io.Writer, canvas *draw.Canvas) error {
 	draw.ClearScreen(w)
 	canvas.Clear()
