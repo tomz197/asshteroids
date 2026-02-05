@@ -40,9 +40,6 @@ type Asteroid struct {
 	Vertices        []float64    // Vertex distances from center (for irregular shape)
 	Destroyed       bool         // Mark for removal and splitting
 	SpawnProtection float64      // Seconds of invulnerability remaining after spawn
-
-	// Reusable buffer for drawing (avoids allocations)
-	drawPoints []draw.Point
 }
 
 // NewAsteroid creates an asteroid at position (x,y) with the given size.
@@ -77,7 +74,6 @@ func NewAsteroid(x, y float64, size AsteroidSize, angle float64) *Asteroid {
 		Size:          size,
 		Radius:        radius,
 		Vertices:      vertices,
-		drawPoints:    make([]draw.Point, numVerts),
 	}
 }
 
@@ -200,18 +196,19 @@ func (a *Asteroid) Draw(ctx DrawContext) error {
 // drawAt draws the asteroid at a specific screen position.
 func (a *Asteroid) drawAt(ctx DrawContext, screenX, screenY float64) {
 	numVerts := len(a.Vertices)
+	points := make([]draw.Point, numVerts)
 
 	for i, dist := range a.Vertices {
 		// Angle for this vertex
 		vertAngle := a.Angle + float64(i)*2*math.Pi/float64(numVerts)
-		a.drawPoints[i] = draw.Point{
+		points[i] = draw.Point{
 			X: screenX + math.Cos(vertAngle)*dist,
 			Y: screenY + math.Sin(vertAngle)*dist,
 		}
 	}
 
 	// Draw to canvas (no aspect ratio needed with 2x vertical resolution)
-	ctx.Canvas.DrawPolygon(a.drawPoints, false)
+	ctx.Canvas.DrawPolygon(points, false)
 }
 
 // Hit marks the asteroid as destroyed.
