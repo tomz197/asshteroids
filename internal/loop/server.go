@@ -24,6 +24,13 @@ type Server struct {
 	mu           sync.RWMutex
 	running      bool
 	stopCh       chan struct{}
+
+	// Double-buffered snapshot objects to avoid allocations
+	snapshotBufs [2][]object.Object
+	snapshotIdx  int
+
+	// Objects marked for removal (deferred compaction)
+	toRemove map[object.Object]struct{}
 }
 
 // ClientHandle represents a client's connection to the server.
@@ -81,6 +88,7 @@ func NewServer() *Server {
 		registerCh:   make(chan *ClientHandle, 16),
 		unregisterCh: make(chan int, 16),
 		stopCh:       make(chan struct{}),
+		toRemove:     make(map[object.Object]struct{}),
 	}
 
 	// Create initial empty snapshot
@@ -188,13 +196,7 @@ func (s *Server) SpawnPlayer(clientID int) {
 
 	// Remove existing player if any
 	if handle.Player != nil {
-		kept := s.world.Objects[:0]
-		for _, obj := range s.world.Objects {
-			if obj != handle.Player {
-				kept = append(kept, obj)
-			}
-		}
-		s.world.Objects = kept
+		s.removeObjectLocked(handle.Player)
 	}
 
 	// Create new player at random location
@@ -215,15 +217,19 @@ func (s *Server) RemovePlayer(clientID int) {
 		return
 	}
 
-	// Remove player from world
+	s.removeObjectLocked(handle.Player)
+	handle.Player = nil
+}
+
+// removeObjectLocked removes a single object from the world. Must be called with lock held.
+func (s *Server) removeObjectLocked(target object.Object) {
 	kept := s.world.Objects[:0]
 	for _, obj := range s.world.Objects {
-		if obj != handle.Player {
+		if obj != target {
 			kept = append(kept, obj)
 		}
 	}
 	s.world.Objects = kept
-	handle.Player = nil
 }
 
 // processRegistrations handles pending client registrations/unregistrations.
@@ -239,13 +245,7 @@ func (s *Server) processRegistrations() {
 			if handle, ok := s.clients[clientID]; ok {
 				// Remove player from world
 				if handle.Player != nil {
-					kept := s.world.Objects[:0]
-					for _, obj := range s.world.Objects {
-						if obj != handle.Player {
-							kept = append(kept, obj)
-						}
-					}
-					s.world.Objects = kept
+					s.removeObjectLocked(handle.Player)
 				}
 				close(handle.EventsCh)
 				delete(s.clients, clientID)
@@ -279,6 +279,14 @@ func (s *Server) updateWorld() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Build player set once for O(1) lookup
+	playerSet := make(map[object.Object]struct{}, len(s.clients))
+	for _, handle := range s.clients {
+		if handle.Player != nil {
+			playerSet[handle.Player] = struct{}{}
+		}
+	}
+
 	// Update each player with their input
 	for _, handle := range s.clients {
 		if handle.Player != nil {
@@ -308,8 +316,8 @@ func (s *Server) updateWorld() {
 
 	kept := s.world.Objects[:0]
 	for _, obj := range s.world.Objects {
-		// Skip players - already updated
-		if s.isPlayerObject(obj) {
+		// Skip players - already updated (O(1) lookup)
+		if _, isPlayer := playerSet[obj]; isPlayer {
 			kept = append(kept, obj)
 			continue
 		}
@@ -317,6 +325,9 @@ func (s *Server) updateWorld() {
 		remove, _ := obj.Update(ctx)
 		if !remove {
 			kept = append(kept, obj)
+		} else {
+			// Release pooled objects back to their pool
+			object.ReleaseObject(obj)
 		}
 	}
 	s.world.Objects = kept
@@ -326,19 +337,15 @@ func (s *Server) updateWorld() {
 	s.checkCollisions()
 }
 
-// isPlayerObject checks if an object is a player.
-func (s *Server) isPlayerObject(obj object.Object) bool {
-	for _, handle := range s.clients {
-		if handle.Player == obj {
-			return true
-		}
-	}
-	return false
-}
-
 // checkCollisions detects and handles collisions.
 func (s *Server) checkCollisions() {
-	projectiles, asteroids := collectCollidables(s.world.Objects)
+	// Use cached slices from world state
+	collectCollidables(s.world.Objects, &s.world.projectileCache, &s.world.asteroidCache)
+	projectiles := s.world.projectileCache
+	asteroids := s.world.asteroidCache
+
+	// Clear removal set for this frame
+	clear(s.toRemove)
 
 	// Projectile-asteroid collisions
 	for _, p := range projectiles {
@@ -414,14 +421,8 @@ func (s *Server) checkCollisions() {
 			x, y := handle.Player.GetPosition()
 			object.SpawnExplosion(x, y, 20, 25.0, 1.0, s.world)
 
-			// Remove player
-			kept := s.world.Objects[:0]
-			for _, obj := range s.world.Objects {
-				if obj != handle.Player {
-					kept = append(kept, obj)
-				}
-			}
-			s.world.Objects = kept
+			// Mark player for removal (deferred compaction)
+			s.toRemove[handle.Player] = struct{}{}
 			handle.Player = nil
 
 			// Notify client
@@ -430,6 +431,17 @@ func (s *Server) checkCollisions() {
 			default:
 			}
 		}
+	}
+
+	// Perform deferred compaction if needed
+	if len(s.toRemove) > 0 {
+		kept := s.world.Objects[:0]
+		for _, obj := range s.world.Objects {
+			if _, remove := s.toRemove[obj]; !remove {
+				kept = append(kept, obj)
+			}
+		}
+		s.world.Objects = kept
 	}
 }
 
@@ -447,12 +459,21 @@ func (s *Server) createSnapshot() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Copy objects slice (shallow copy - objects themselves are updated in place)
-	objects := make([]object.Object, len(s.world.Objects))
-	copy(objects, s.world.Objects)
+	// Use double-buffered slice to avoid allocations
+	idx := s.snapshotIdx
+	s.snapshotIdx = 1 - s.snapshotIdx // Toggle for next frame
+
+	// Grow buffer if needed, otherwise reuse
+	buf := s.snapshotBufs[idx]
+	if cap(buf) < len(s.world.Objects) {
+		buf = make([]object.Object, len(s.world.Objects))
+		s.snapshotBufs[idx] = buf
+	}
+	buf = buf[:len(s.world.Objects)]
+	copy(buf, s.world.Objects)
 
 	snapshot := &WorldSnapshot{
-		Objects: objects,
+		Objects: buf,
 		World:   s.world.World,
 		Delta:   s.world.Delta,
 	}

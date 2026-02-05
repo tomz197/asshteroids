@@ -21,6 +21,9 @@ type User struct {
 	// Shooting
 	FireRate     float64 // Minimum seconds between shots
 	fireCooldown float64 // Time until next shot allowed
+
+	// Reusable buffer for drawing (avoids allocations)
+	drawPoints [3]draw.Point
 }
 
 // NewUser creates a new spaceship at the given position.
@@ -110,7 +113,9 @@ func (u *User) Update(ctx UpdateContext) (bool, error) {
 // Draw renders the spaceship as a triangle pointing in the direction of travel.
 func (u *User) Draw(ctx DrawContext) error {
 	// Get screen positions (handles world wrapping)
-	for _, pos := range WorldToScreen(u.X, u.Y, ctx.Camera, ctx.View, ctx.World) {
+	positions := WorldToScreen(u.X, u.Y, ctx.Camera, ctx.View, ctx.World)
+	for i := 0; i < positions.Count; i++ {
+		pos := positions.Positions[i]
 		u.drawAt(ctx, pos.X, pos.Y)
 	}
 
@@ -129,15 +134,13 @@ func (u *User) drawAt(ctx DrawContext, screenX, screenY float64) {
 
 	size := u.Size
 
-	// Calculate vertex positions in screen space
-	triangle := []draw.Point{
-		{X: screenX + math.Cos(noseAngle)*size, Y: screenY + math.Sin(noseAngle)*size},
-		{X: screenX + math.Cos(leftAngle)*size*0.7, Y: screenY + math.Sin(leftAngle)*size*0.7},
-		{X: screenX + math.Cos(rightAngle)*size*0.7, Y: screenY + math.Sin(rightAngle)*size*0.7},
-	}
+	// Calculate vertex positions in screen space (reuse fixed array)
+	u.drawPoints[0] = draw.Point{X: screenX + math.Cos(noseAngle)*size, Y: screenY + math.Sin(noseAngle)*size}
+	u.drawPoints[1] = draw.Point{X: screenX + math.Cos(leftAngle)*size*0.7, Y: screenY + math.Sin(leftAngle)*size*0.7}
+	u.drawPoints[2] = draw.Point{X: screenX + math.Cos(rightAngle)*size*0.7, Y: screenY + math.Sin(rightAngle)*size*0.7}
 
 	// Draw the triangle to canvas
-	ctx.Canvas.DrawPolygon(triangle, true)
+	ctx.Canvas.DrawPolygon(u.drawPoints[:], true)
 }
 
 // GetPosition returns the ship's center position.

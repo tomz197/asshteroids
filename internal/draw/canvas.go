@@ -5,20 +5,27 @@ import (
 	"io"
 	"math"
 	"sort"
+	"strings"
 )
 
 // Canvas is a drawing buffer with 2x vertical resolution using half-block characters.
 // Supports scaling from logical coordinates to actual terminal pixels.
 type Canvas struct {
-	termWidth  int      // Actual terminal columns
-	termHeight int      // Actual terminal rows
-	pixels     [][]bool // [subpixel_y][x] - true if pixel is set
+	termWidth      int    // Actual terminal columns
+	termHeight     int    // Actual terminal rows
+	subPixelHeight int    // termHeight * 2
+	pixels         []bool // Flat slice: [y * termWidth + x] - true if pixel is set
 
 	// Scaling from logical to pixel coordinates
 	logicalWidth  float64 // Target/logical width
 	logicalHeight float64 // Target/logical height (in sub-pixels)
 	scaleX        float64 // termWidth / logicalWidth
 	scaleY        float64 // (termHeight*2) / logicalHeight
+
+	// Reusable buffers to reduce allocations
+	renderBuf       strings.Builder // Buffer for batching render output
+	scaledBuf       []Point         // Reusable buffer for fillPolygon scaled points
+	intersectionBuf []float64       // Reusable buffer for scanline intersections
 }
 
 // NewCanvas creates a canvas for the given terminal dimensions.
@@ -33,18 +40,15 @@ func NewCanvas(width, height int) *Canvas {
 // termWidth/Height are the actual terminal dimensions.
 func NewScaledCanvas(termWidth, termHeight int, logicalWidth, logicalHeight float64) *Canvas {
 	subPixelHeight := termHeight * 2
-	pixels := make([][]bool, subPixelHeight)
-	for i := range pixels {
-		pixels[i] = make([]bool, termWidth)
-	}
 	return &Canvas{
-		termWidth:     termWidth,
-		termHeight:    termHeight,
-		pixels:        pixels,
-		logicalWidth:  logicalWidth,
-		logicalHeight: logicalHeight,
-		scaleX:        float64(termWidth) / logicalWidth,
-		scaleY:        float64(subPixelHeight) / logicalHeight,
+		termWidth:      termWidth,
+		termHeight:     termHeight,
+		subPixelHeight: subPixelHeight,
+		pixels:         make([]bool, subPixelHeight*termWidth),
+		logicalWidth:   logicalWidth,
+		logicalHeight:  logicalHeight,
+		scaleX:         float64(termWidth) / logicalWidth,
+		scaleY:         float64(subPixelHeight) / logicalHeight,
 	}
 }
 
@@ -54,12 +58,10 @@ func (c *Canvas) Resize(termWidth, termHeight int) {
 
 	// Reallocate if size changed
 	if termWidth != c.termWidth || termHeight != c.termHeight {
-		c.pixels = make([][]bool, subPixelHeight)
-		for i := range c.pixels {
-			c.pixels[i] = make([]bool, termWidth)
-		}
+		c.pixels = make([]bool, subPixelHeight*termWidth)
 		c.termWidth = termWidth
 		c.termHeight = termHeight
+		c.subPixelHeight = subPixelHeight
 	}
 
 	// Update scale factors
@@ -69,17 +71,13 @@ func (c *Canvas) Resize(termWidth, termHeight int) {
 
 // Clear resets all pixels in the canvas.
 func (c *Canvas) Clear() {
-	for y := range c.pixels {
-		for x := range c.pixels[y] {
-			c.pixels[y][x] = false
-		}
-	}
+	clear(c.pixels)
 }
 
 // setPixel sets a pixel at actual terminal coordinates (no scaling).
 func (c *Canvas) setPixel(x, y int) {
-	if x >= 0 && x < c.termWidth && y >= 0 && y < len(c.pixels) {
-		c.pixels[y][x] = true
+	if x >= 0 && x < c.termWidth && y >= 0 && y < c.subPixelHeight {
+		c.pixels[y*c.termWidth+x] = true
 	}
 }
 
@@ -180,8 +178,13 @@ func (c *Canvas) DrawPolygonWithOffset(points []Point, filled bool, offsetX, off
 // fillPolygon fills a polygon using scanline algorithm.
 // Works in pixel space for proper scaling.
 func (c *Canvas) fillPolygon(points []Point) {
+	// Reuse or grow scaled points buffer
+	if cap(c.scaledBuf) < len(points) {
+		c.scaledBuf = make([]Point, len(points))
+	}
+	scaled := c.scaledBuf[:len(points)]
+
 	// Scale points to pixel coordinates
-	scaled := make([]Point, len(points))
 	for i, p := range points {
 		scaled[i] = Point{
 			X: p.X * c.scaleX,
@@ -207,8 +210,10 @@ func (c *Canvas) fillPolygon(points []Point) {
 	for y := yStart; y <= yEnd; y++ {
 		scanY := float64(y) + 0.5
 
+		// Reuse intersection buffer
+		intersections := c.intersectionBuf[:0]
+
 		// Find intersections with all edges
-		var intersections []float64
 		n := len(scaled)
 		for i := 0; i < n; i++ {
 			p1 := scaled[i]
@@ -220,6 +225,9 @@ func (c *Canvas) fillPolygon(points []Point) {
 				intersections = append(intersections, x)
 			}
 		}
+
+		// Store back in case it grew
+		c.intersectionBuf = intersections
 
 		sort.Float64s(intersections)
 
@@ -235,13 +243,19 @@ func (c *Canvas) fillPolygon(points []Point) {
 
 // Render outputs the canvas to the writer using half-block characters.
 func (c *Canvas) Render(w io.Writer) {
+	// Reset and pre-grow buffer for better performance
+	c.renderBuf.Reset()
+	c.renderBuf.Grow(c.termWidth * c.termHeight * 12) // Estimate ~12 bytes per cell
+
 	for row := 0; row < c.termHeight; row++ {
 		topY := row * 2
 		bottomY := row*2 + 1
+		topOffset := topY * c.termWidth
+		bottomOffset := bottomY * c.termWidth
 
 		for col := 0; col < c.termWidth; col++ {
-			top := c.pixels[topY][col]
-			bottom := bottomY < len(c.pixels) && c.pixels[bottomY][col]
+			top := c.pixels[topOffset+col]
+			bottom := bottomY < c.subPixelHeight && c.pixels[bottomOffset+col]
 
 			var ch rune
 			switch {
@@ -255,9 +269,12 @@ func (c *Canvas) Render(w io.Writer) {
 				continue // Skip empty cells
 			}
 
-			fmt.Fprintf(w, "\033[%d;%dH%c", row+1, col+1, ch)
+			fmt.Fprintf(&c.renderBuf, "\033[%d;%dH%c", row+1, col+1, ch)
 		}
 	}
+
+	// Write all output at once
+	io.WriteString(w, c.renderBuf.String())
 }
 
 // LogicalWidth returns the logical width (target resolution).

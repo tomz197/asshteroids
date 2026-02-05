@@ -35,6 +35,9 @@ func updateObjects(state *State) error {
 		}
 		if !remove {
 			kept = append(kept, obj)
+		} else {
+			// Release pooled objects back to their pool
+			object.ReleaseObject(obj)
 		}
 	}
 	state.Objects = kept
@@ -46,32 +49,32 @@ func updateObjects(state *State) error {
 }
 
 // collectCollidables extracts projectiles and asteroids from the object list.
-func collectCollidables(objects []object.Object) ([]*object.Projectile, []*object.Asteroid) {
-	var projectiles []*object.Projectile
-	var asteroids []*object.Asteroid
+// Uses pre-allocated slices to avoid allocations.
+func collectCollidables(objects []object.Object, projectiles *[]*object.Projectile, asteroids *[]*object.Asteroid) {
+	*projectiles = (*projectiles)[:0]
+	*asteroids = (*asteroids)[:0]
 
 	for _, obj := range objects {
 		switch o := obj.(type) {
 		case *object.Projectile:
-			projectiles = append(projectiles, o)
+			*projectiles = append(*projectiles, o)
 		case *object.Asteroid:
-			asteroids = append(asteroids, o)
+			*asteroids = append(*asteroids, o)
 		}
 	}
-	return projectiles, asteroids
 }
 
 // checkCollisions detects and handles all collisions between objects (legacy single-player).
 func checkCollisions(state *State) {
-	projectiles, asteroids := collectCollidables(state.Objects)
+	collectCollidables(state.Objects, &state.projectileCache, &state.asteroidCache)
 
-	checkProjectileAsteroidCollisions(state, projectiles, asteroids)
-	checkProjectileProjectileCollisions(projectiles)
-	checkAsteroidAsteroidCollisions(asteroids)
+	checkProjectileAsteroidCollisions(state, state.projectileCache, state.asteroidCache)
+	checkProjectileProjectileCollisions(state.projectileCache)
+	checkAsteroidAsteroidCollisions(state.asteroidCache)
 
 	// Player collisions only if vulnerable
 	if state.Player != nil && state.GameState == GameStatePlaying && state.InvincibleTime <= 0 {
-		if checkPlayerCollisions(state, projectiles, asteroids) {
+		if checkPlayerCollisions(state, state.projectileCache, state.asteroidCache) {
 			return // Player died, skip remaining checks
 		}
 	}

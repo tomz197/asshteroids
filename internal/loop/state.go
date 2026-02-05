@@ -25,6 +25,10 @@ type WorldState struct {
 	Screen  object.Screen   // Used for update context (world bounds)
 	World   object.Screen   // World dimensions (total game area)
 	Delta   time.Duration   // Frame delta time
+
+	// Reusable caches for collision detection (avoids allocations)
+	projectileCache []*object.Projectile
+	asteroidCache   []*object.Asteroid
 }
 
 // ClientState holds per-player state (input, score, camera, etc.).

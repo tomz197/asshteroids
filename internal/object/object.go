@@ -2,6 +2,7 @@ package object
 
 import (
 	"io"
+	"math"
 	"time"
 
 	"github.com/tomz197/asteroids/internal/draw"
@@ -53,26 +54,31 @@ func (s Screen) WrapPosition(x, y *float64) {
 	h := float64(s.Height)
 
 	if w > 0 {
-		for *x < 0 {
+		*x = math.Mod(*x, w)
+		if *x < 0 {
 			*x += w
-		}
-		for *x > w {
-			*x -= w
 		}
 	}
 	if h > 0 {
-		for *y < 0 {
+		*y = math.Mod(*y, h)
+		if *y < 0 {
 			*y += h
-		}
-		for *y > h {
-			*y -= h
 		}
 	}
 }
 
+// ScreenPositions holds up to 4 screen positions for world-wrapped objects.
+// Using a fixed array avoids allocations in the hot rendering path.
+type ScreenPositions struct {
+	Positions [4]draw.Point
+	Count     int
+}
+
 // WorldToScreen converts world coordinates to screen coordinates relative to camera.
 // Returns the screen positions where the object should be drawn (handles world wrapping).
-func WorldToScreen(worldX, worldY float64, cam Camera, view, world Screen) []draw.Point {
+func WorldToScreen(worldX, worldY float64, cam Camera, view, world Screen) ScreenPositions {
+	var result ScreenPositions
+
 	viewW := float64(view.Width)
 	viewH := float64(view.Height)
 	worldW := float64(world.Width)
@@ -86,24 +92,24 @@ func WorldToScreen(worldX, worldY float64, cam Camera, view, world Screen) []dra
 	screenX := worldX - camLeft
 	screenY := worldY - camTop
 
-	// Wrap the offset to handle world wrapping
-	var positions []draw.Point
-
 	// Check all possible wrap positions (original + wrapped copies)
+	margin := 10.0
 	for dx := -1; dx <= 1; dx++ {
 		for dy := -1; dy <= 1; dy++ {
 			sx := screenX + float64(dx)*worldW
 			sy := screenY + float64(dy)*worldH
 
 			// Check if this position is within the view (with some margin for large objects)
-			margin := 10.0
 			if sx >= -margin && sx <= viewW+margin && sy >= -margin && sy <= viewH+margin {
-				positions = append(positions, draw.Point{X: sx, Y: sy})
+				if result.Count < 4 {
+					result.Positions[result.Count] = draw.Point{X: sx, Y: sy}
+					result.Count++
+				}
 			}
 		}
 	}
 
-	return positions
+	return result
 }
 
 // Object is a drawable and updatable game entity.
@@ -121,6 +127,19 @@ type Destructible interface {
 	MarkDestroyed()
 	// IsDestroyed returns true if the object is marked for destruction.
 	IsDestroyed() bool
+}
+
+// Releasable is implemented by pooled objects that can be returned to a pool.
+type Releasable interface {
+	// Release returns the object to its pool for reuse.
+	Release()
+}
+
+// ReleaseObject releases an object back to its pool if it implements Releasable.
+func ReleaseObject(obj Object) {
+	if r, ok := obj.(Releasable); ok {
+		r.Release()
+	}
 }
 
 // ShouldRenderBlink returns true if an object with remaining protection/invincibility

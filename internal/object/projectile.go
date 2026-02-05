@@ -69,7 +69,9 @@ func (p *Projectile) Update(ctx UpdateContext) (bool, error) {
 // Draw renders the projectile.
 func (p *Projectile) Draw(ctx DrawContext) error {
 	// Get screen positions (handles world wrapping)
-	for _, pos := range WorldToScreen(p.X, p.Y, ctx.Camera, ctx.View, ctx.World) {
+	positions := WorldToScreen(p.X, p.Y, ctx.Camera, ctx.View, ctx.World)
+	for i := 0; i < positions.Count; i++ {
+		pos := positions.Positions[i]
 		ctx.Canvas.SetFloat(pos.X, pos.Y)
 	}
 

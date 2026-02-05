@@ -3,7 +3,15 @@ package object
 import (
 	"math"
 	"math/rand"
+	"sync"
 )
+
+// particlePool is a sync.Pool for reusing Particle objects to reduce allocations.
+var particlePool = sync.Pool{
+	New: func() any {
+		return &Particle{}
+	},
+}
 
 // Particle is a short-lived visual effect.
 type Particle struct {
@@ -16,19 +24,25 @@ type Particle struct {
 	Fade        bool    // Whether to fade out over lifetime
 }
 
-// NewParticle creates a single particle.
+// NewParticle creates a single particle from the pool.
 func NewParticle(x, y, vx, vy, lifetime float64, symbol rune) *Particle {
-	return &Particle{
-		X:           x,
-		Y:           y,
-		VX:          vx,
-		VY:          vy,
-		Lifetime:    lifetime,
-		MaxLifetime: lifetime,
-		Drag:        0.95,
-		Symbol:      symbol,
-		Fade:        true,
-	}
+	p := particlePool.Get().(*Particle)
+	p.X = x
+	p.Y = y
+	p.VX = vx
+	p.VY = vy
+	p.Lifetime = lifetime
+	p.MaxLifetime = lifetime
+	p.Drag = 0.95
+	p.Symbol = symbol
+	p.Fade = true
+	return p
+}
+
+// Release returns the particle to the pool for reuse.
+// Should be called when the particle is removed from the game.
+func (p *Particle) Release() {
+	particlePool.Put(p)
 }
 
 // SpawnExplosion creates particles in a circular burst pattern.
@@ -143,7 +157,9 @@ func (p *Particle) Draw(ctx DrawContext) error {
 	}
 
 	// Get screen positions (handles world wrapping)
-	for _, pos := range WorldToScreen(p.X, p.Y, ctx.Camera, ctx.View, ctx.World) {
+	positions := WorldToScreen(p.X, p.Y, ctx.Camera, ctx.View, ctx.World)
+	for i := 0; i < positions.Count; i++ {
+		pos := positions.Positions[i]
 		ctx.Canvas.SetFloat(pos.X, pos.Y)
 	}
 
