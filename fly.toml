@@ -1,63 +1,35 @@
-# Fly.io configuration for ASSHTEROIDS
-# See https://fly.io/docs/reference/configuration/ for more info
+# fly.toml app configuration file generated for asshteroids on 2026-02-05T15:35:38+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "asshteroids"
-primary_region = "ams"
+app = 'asshteroids'
+primary_region = 'fra'
 
 [build]
 
 [env]
-  SSH_HOST = "0.0.0.0"
   SSH_PORT = "2222"
-  SSH_HOST_KEY = "/app/keys/host_key"
-  WEB_HOST = "0.0.0.0"
-  WEB_PORT = "8080"
-  # Set SSH_DISPLAY_HOST to your Fly.io app hostname after deployment
-  # SSH_DISPLAY_HOST = "asshteroids.fly.dev"
 
-[mounts]
-  source = "asteroids_keys"
-  destination = "/app/keys"
-
-# HTTP service for the web landing page
-[[services]]
+# HTTP service for web interface
+[http_service]
   internal_port = 8080
-  protocol = "tcp"
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
 
-  [[services.ports]]
-    handlers = ["http"]
-    port = 80
-
-  [[services.ports]]
-    handlers = ["tls", "http"]
-    port = 443
-
-  [services.concurrency]
-    hard_limit = 100
-    soft_limit = 50
-    type = "connections"
-
-  [[services.http_checks]]
-    interval = "10s"
-    timeout = "2s"
-    grace_period = "5s"
-    method = "GET"
-    path = "/"
-
-# TCP service for SSH connections
+# TCP service for SSH game access
 [[services]]
   internal_port = 2222
   protocol = "tcp"
-
+  auto_stop_machines = true
+  auto_start_machines = true
   [[services.ports]]
     port = 22
 
-  [services.concurrency]
-    hard_limit = 50
-    soft_limit = 25
-    type = "connections"
-
 [[vm]]
-  memory = "256mb"
-  cpu_kind = "shared"
+  memory = '256mb'
+  cpu_kind = 'shared'
   cpus = 1

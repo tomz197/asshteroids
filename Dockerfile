@@ -43,13 +43,12 @@ RUN chmod +x /app/start.sh && \
 USER asteroids
 
 # Expose SSH and HTTP ports
-EXPOSE 22
+EXPOSE 2222
 EXPOSE 8080
 
 # Environment variables for configuration
 ENV SSH_HOST=0.0.0.0
-ENV SSH_PORT=22
-ENV SSH_HOST_KEY=/app/keys/host_key
+ENV SSH_PORT=2222
 ENV WEB_HOST=0.0.0.0
 ENV WEB_PORT=8080
 ENV SSH_DISPLAY_HOST=localhost

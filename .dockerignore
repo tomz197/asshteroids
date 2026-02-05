@@ -1,0 +1,16 @@
+# flyctl launch added from .gitignore
+bin
+dist
+**/*.exe
+**/*.exe~
+**/*.dll
+**/*.so
+**/*.dylib
+**/*.test
+**/*.out
+**/.DS_Store
+**/.idea
+**/.vscode
+
+**/.cursorrules
+fly.toml
