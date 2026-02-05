@@ -35,10 +35,11 @@ type Server struct {
 
 // ClientHandle represents a client's connection to the server.
 type ClientHandle struct {
-	ID       int
-	Player   *object.User
-	Input    object.Input
-	EventsCh chan ClientEvent // Events sent to client (death, etc.)
+	ID             int
+	Player         *object.User
+	Input          object.Input
+	EventsCh       chan ClientEvent // Events sent to client (death, etc.)
+	InvincibleTime float64          // Remaining invincibility time in seconds
 }
 
 // ClientInput represents input from a specific client.
@@ -204,6 +205,7 @@ func (s *Server) SpawnPlayer(clientID int) {
 	y := rand.Float64() * float64(worldHeight)
 	player := object.NewUser(x, y)
 	handle.Player = player
+	handle.InvincibleTime = InvincibilitySeconds // Grant spawn invincibility
 	s.world.AddObject(player)
 }
 
@@ -279,11 +281,18 @@ func (s *Server) updateWorld() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Build player set once for O(1) lookup
+	// Decrement invincibility timers and build player set for O(1) lookup
+	dt := s.world.Delta.Seconds()
 	playerSet := make(map[object.Object]struct{}, len(s.clients))
 	for _, handle := range s.clients {
 		if handle.Player != nil {
 			playerSet[handle.Player] = struct{}{}
+		}
+		if handle.InvincibleTime > 0 {
+			handle.InvincibleTime -= dt
+			if handle.InvincibleTime < 0 {
+				handle.InvincibleTime = 0
+			}
 		}
 	}
 
@@ -381,9 +390,9 @@ func (s *Server) checkCollisions() {
 	// Asteroid-asteroid collisions
 	checkAsteroidAsteroidCollisions(asteroids)
 
-	// Player collisions
+	// Player collisions (skip invincible players)
 	for _, handle := range s.clients {
-		if handle.Player == nil {
+		if handle.Player == nil || handle.InvincibleTime > 0 {
 			continue
 		}
 		px, py := handle.Player.GetPosition()
