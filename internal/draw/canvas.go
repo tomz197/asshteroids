@@ -241,6 +241,10 @@ func (c *Canvas) fillPolygon(points []Point) {
 	}
 }
 
+// maxChunkSize is the maximum bytes to write at once for optimal network flow.
+// 1500 bytes matches typical MTU size for smooth SSH/network transmission.
+const maxChunkSize = 1500
+
 // Render outputs the canvas to the writer using half-block characters.
 func (c *Canvas) Render(w io.Writer) {
 	// Reset and pre-grow buffer for better performance
@@ -273,8 +277,16 @@ func (c *Canvas) Render(w io.Writer) {
 		}
 	}
 
-	// Write all output at once
-	io.WriteString(w, c.renderBuf.String())
+	// Write output in chunks for optimal network flow
+	data := c.renderBuf.String()
+	for len(data) > 0 {
+		chunk := data
+		if len(chunk) > maxChunkSize {
+			chunk = data[:maxChunkSize]
+		}
+		io.WriteString(w, chunk)
+		data = data[len(chunk):]
+	}
 }
 
 // LogicalWidth returns the logical width (target resolution).
