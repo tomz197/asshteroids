@@ -86,6 +86,7 @@ const (
 // WorldSnapshot is an immutable snapshot of the world state for rendering.
 type WorldSnapshot struct {
 	Objects []object.Object
+	Players int
 	World   object.Screen
 	Delta   time.Duration
 }
@@ -526,6 +527,7 @@ func (s *Server) createSnapshot() {
 
 	snapshot := &WorldSnapshot{
 		Objects: buf,
+		Players: len(s.clients),
 		World:   s.world.World,
 		Delta:   s.world.Delta,
 	}

@@ -316,6 +316,7 @@ func (c *Client) drawStartScreen(centerX, centerY int) {
 
 // drawPlayingHUD draws the in-game HUD.
 func (c *Client) drawPlayingHUD(termWidth, termHeight int) {
+	snapshot := c.server.GetSnapshot()
 	// Score display (top left)
 	scoreText := fmt.Sprintf("Score: %d", c.state.Score)
 	draw.MoveCursor(c.writer, 2, 1)
@@ -325,6 +326,11 @@ func (c *Client) drawPlayingHUD(termWidth, termHeight int) {
 	livesText := fmt.Sprintf("Lives: %d", c.state.Lives)
 	draw.MoveCursor(c.writer, termWidth-len(livesText)-1, 1)
 	fmt.Fprint(c.writer, livesText)
+
+	// Live players (bottom right)
+	livePlayersText := fmt.Sprintf("Players: %d", snapshot.Players)
+	draw.MoveCursor(c.writer, termWidth-len(livePlayersText)-1, termHeight)
+	fmt.Fprint(c.writer, livePlayersText)
 
 	// Coordinates display (bottom left)
 	if c.state.Player != nil {
