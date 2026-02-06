@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/tomz197/asteroids/internal/loop"
+	"github.com/tomz197/asteroids/internal/loop/client"
 	"golang.org/x/term"
 )
 
@@ -21,7 +22,7 @@ func main() {
 	}()
 
 	reader := bufio.NewReader(os.Stdin)
-	if err := loop.RunClientServer(reader, os.Stdout, loop.ClientOptions{}); err != nil {
+	if err := loop.RunClientServer(reader, os.Stdout, client.ClientOptions{}); err != nil {
 		fmt.Fprintf(os.Stderr, "game error: %v\n", err)
 		os.Exit(1)
 	}

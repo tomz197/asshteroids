@@ -19,7 +19,8 @@ import (
 	"github.com/charmbracelet/wish/logging"
 	"github.com/tomz197/asteroids/internal/config"
 	"github.com/tomz197/asteroids/internal/draw"
-	"github.com/tomz197/asteroids/internal/loop"
+	"github.com/tomz197/asteroids/internal/loop/client"
+	"github.com/tomz197/asteroids/internal/loop/server"
 )
 
 const (
@@ -30,7 +31,7 @@ const (
 
 // Global game server - shared by all SSH clients
 var (
-	gameServer   *loop.Server
+	gameServer   *server.Server
 	cancelServer context.CancelFunc
 	serverOnce   sync.Once
 )
@@ -49,7 +50,7 @@ func main() {
 	serverOnce.Do(func() {
 		var ctx context.Context
 		ctx, cancelServer = context.WithCancel(context.Background())
-		gameServer = loop.NewServer()
+		gameServer = server.NewServer()
 		go gameServer.Run(ctx)
 		log.Println("Game server started")
 	})
@@ -131,13 +132,13 @@ func gameMiddleware(next ssh.Handler) ssh.Handler {
 		}()
 
 		reader := bufio.NewReader(sess)
-		clientOpts := loop.ClientOptions{
+		clientOpts := client.ClientOptions{
 			TermSizeFunc: sizeTracker.getSize,
 		}
 
 		// Create a new client connected to the shared game server
-		client := loop.NewClient(gameServer, reader, sess, clientOpts)
-		if err := client.Run(); err != nil {
+		c := client.NewClient(gameServer, reader, sess, clientOpts)
+		if err := c.Run(); err != nil {
 			log.Printf("Game error for %s: %v", sess.User(), err)
 		}
 

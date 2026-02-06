@@ -1,6 +1,7 @@
-package loop
+package server
 
 import (
+	"github.com/tomz197/asteroids/internal/loop/config"
 	"github.com/tomz197/asteroids/internal/object"
 	"github.com/tomz197/asteroids/internal/physics"
 )
@@ -25,11 +26,11 @@ func collectCollidables(objects []object.Object, projectiles *[]*object.Projecti
 func asteroidScore(size object.AsteroidSize) int {
 	switch size {
 	case object.AsteroidLarge:
-		return ScoreLargeAsteroid
+		return config.ScoreLargeAsteroid
 	case object.AsteroidMedium:
-		return ScoreMediumAsteroid
+		return config.ScoreMediumAsteroid
 	case object.AsteroidSmall:
-		return ScoreSmallAsteroid
+		return config.ScoreSmallAsteroid
 	default:
 		return 0
 	}

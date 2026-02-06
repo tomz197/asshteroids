@@ -1,0 +1,253 @@
+package client
+
+import (
+	"bufio"
+	"io"
+	"time"
+
+	"github.com/tomz197/asteroids/internal/draw"
+	"github.com/tomz197/asteroids/internal/input"
+	"github.com/tomz197/asteroids/internal/loop/config"
+	"github.com/tomz197/asteroids/internal/loop/server"
+	"github.com/tomz197/asteroids/internal/object"
+)
+
+// Client handles rendering and input for a single connection.
+type Client struct {
+	server       server.GameServer
+	handle       *server.ClientHandle
+	state        *ClientState
+	canvas       *draw.Canvas
+	reader       *bufio.Reader
+	writer       io.Writer
+	inputStream  *input.Stream
+	lastInput    time.Time
+	termSizeFunc draw.TermSizeFunc
+}
+
+// ClientOptions configures the client.
+type ClientOptions struct {
+	TermSizeFunc draw.TermSizeFunc
+}
+
+// NewClient creates a new client connected to the given server.
+func NewClient(gs server.GameServer, r *bufio.Reader, w io.Writer, opts ClientOptions) *Client {
+	termSizeFunc := opts.TermSizeFunc
+	if termSizeFunc == nil {
+		termSizeFunc = draw.DefaultTermSizeFunc
+	}
+
+	handle := gs.RegisterClient()
+	state := NewClientState()
+	state.termSizeFunc = termSizeFunc
+
+	// Set up view dimensions
+	state.View = object.Screen{
+		Width:   config.ViewWidth,
+		Height:  config.ViewHeight,
+		CenterX: config.ViewWidth / 2,
+		CenterY: config.ViewHeight / 2,
+	}
+
+	// Camera starts at world center
+	state.Camera = object.Camera{
+		X: float64(config.WorldWidth) / 2,
+		Y: float64(config.WorldHeight) / 2,
+	}
+
+	// Create canvas
+	termWidth, termHeight, _ := draw.TerminalSizeRawWith(termSizeFunc)
+	canvas := draw.NewScaledCanvas(termWidth, termHeight, config.ViewWidth, config.ViewHeight)
+
+	return &Client{
+		server:       gs,
+		handle:       handle,
+		state:        state,
+		canvas:       canvas,
+		reader:       r,
+		writer:       w,
+		lastInput:    time.Now(),
+		inputStream:  input.StartStream(r),
+		termSizeFunc: termSizeFunc,
+	}
+}
+
+// Run starts the client loop. Blocks until the client disconnects or server stops.
+func (c *Client) Run() error {
+	draw.HideCursor(c.writer)
+	defer draw.ShowCursor(c.writer)
+	draw.ClearScreen(c.writer)
+
+	lastTime := time.Now()
+
+	for c.state.Running {
+		frameStart := time.Now()
+		c.state.delta = frameStart.Sub(lastTime)
+		lastTime = frameStart
+
+		// Process input
+		c.processInput()
+
+		// Check for server events
+		c.processServerEvents()
+
+		// Handle screen resize
+		c.updateScreen()
+
+		// Handle game state
+		switch c.state.GameState {
+		case GameStateStart:
+			c.updateStartState()
+		case GameStatePlaying:
+			c.updatePlayingState()
+		case GameStateDead:
+			c.updateDeadState()
+		case GameStateShutdown:
+			c.updateShutdownState()
+		}
+
+		// Draw frame
+		if err := c.drawFrame(); err != nil {
+			return err
+		}
+
+		// Frame timing
+		elapsed := time.Since(frameStart)
+		if elapsed < config.ClientTargetFrameTime {
+			time.Sleep(config.ClientTargetFrameTime - elapsed)
+		}
+	}
+
+	// Unregister from server
+	c.server.UnregisterClient(c.handle.ID)
+
+	draw.ClearScreen(c.writer)
+	return nil
+}
+
+// processInput reads input and sends it to the server.
+func (c *Client) processInput() {
+	c.state.Input = input.ReadInput(c.inputStream)
+
+	if len(c.state.Input.Pressed) > 0 {
+		c.lastInput = time.Now()
+		c.state.isInactive = false
+	} else if time.Since(c.lastInput).Seconds() > config.InactivityDisconnectUser {
+		c.state.Running = false
+	} else if time.Since(c.lastInput).Seconds() > config.InactivityWarnUser {
+		c.state.isInactive = true
+	}
+
+	if c.state.Input.Quit {
+		c.state.Running = false
+	}
+
+	// Send input to server if playing
+	if c.state.GameState == GameStatePlaying {
+		c.server.SendInput(c.handle.ID, c.state.Input)
+	}
+}
+
+// processServerEvents handles events from the server.
+func (c *Client) processServerEvents() {
+	for {
+		select {
+		case event, ok := <-c.handle.EventsCh:
+			if !ok {
+				// Server closed the channel
+				c.state.Running = false
+				return
+			}
+			switch event.Type {
+			case server.EventPlayerDied:
+				c.state.Lives--
+				c.state.GameState = GameStateDead
+				c.state.Player = nil
+			case server.EventScoreAdd:
+				c.state.Score += event.ScoreAdd
+			case server.EventServerShutdown:
+				c.state.GameState = GameStateShutdown
+				c.state.shutdownTimer = config.ShutdownDisplaySeconds
+			}
+		default:
+			return
+		}
+	}
+}
+
+// updateScreen handles terminal resize.
+func (c *Client) updateScreen() {
+	termWidth, termHeight, err := draw.TerminalSizeRawWith(c.termSizeFunc)
+	if err != nil {
+		return
+	}
+	c.canvas.Resize(termWidth, termHeight)
+}
+
+// updateStartState handles the start screen.
+func (c *Client) updateStartState() {
+	if c.state.Input.Space || c.state.Input.Enter {
+		c.startGame()
+	}
+}
+
+// updatePlayingState handles the playing state.
+func (c *Client) updatePlayingState() {
+	// Decrement invincibility timer
+	if c.state.InvincibleTime > 0 {
+		c.state.InvincibleTime -= c.state.delta.Seconds()
+		if c.state.InvincibleTime < 0 {
+			c.state.InvincibleTime = 0
+		}
+	}
+
+	// Update camera to follow player
+	c.state.Player = c.server.GetClientPlayer(c.handle.ID)
+	if c.state.Player != nil {
+		px, py := c.state.Player.GetPosition()
+		c.state.Camera.X = px
+		c.state.Camera.Y = py
+	}
+}
+
+// updateDeadState handles the death screen.
+func (c *Client) updateDeadState() {
+	if c.state.Input.Space || c.state.Input.Enter {
+		c.startGame()
+	}
+}
+
+// startGame starts or restarts the game.
+func (c *Client) startGame() {
+	input.ResetKeyInput(c.inputStream)
+
+	if c.state.GameState == GameStateStart || c.state.Lives <= 0 {
+		// Full restart
+		c.state.Score = 0
+		c.state.Lives = config.InitialLives
+	}
+
+	// Request server to spawn player
+	c.server.SpawnPlayer(c.handle.ID)
+	c.state.Player = c.server.GetClientPlayer(c.handle.ID)
+
+	// Reset camera to player position
+	if c.state.Player != nil {
+		px, py := c.state.Player.GetPosition()
+		c.state.Camera.X = px
+		c.state.Camera.Y = py
+	}
+
+	// Grant invincibility on spawn
+	c.state.InvincibleTime = config.InvincibilitySeconds
+
+	c.state.GameState = GameStatePlaying
+}
+
+// updateShutdownState handles the shutdown screen countdown.
+func (c *Client) updateShutdownState() {
+	c.state.shutdownTimer -= c.state.delta.Seconds()
+	if c.state.shutdownTimer <= 0 {
+		c.state.Running = false
+	}
+}

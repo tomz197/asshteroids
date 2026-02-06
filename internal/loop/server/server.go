@@ -1,4 +1,4 @@
-package loop
+package server
 
 import (
 	"context"
@@ -7,12 +7,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tomz197/asteroids/internal/loop/config"
 	"github.com/tomz197/asteroids/internal/object"
 	"github.com/tomz197/asteroids/internal/physics"
 )
-
-const serverTickRate = 60
-const serverTickTime = time.Second / serverTickRate
 
 // GameServer is the interface clients use to communicate with the game server.
 // Decouples the Client from the concrete Server implementation, enabling
@@ -83,22 +81,14 @@ const (
 	EventServerShutdown
 )
 
-// WorldSnapshot is an immutable snapshot of the world state for rendering.
-type WorldSnapshot struct {
-	Objects []object.Object
-	Players int
-	World   object.Screen
-	Delta   time.Duration
-}
-
 // NewServer creates a new game server.
 func NewServer() *Server {
 	world := NewWorldState()
 	world.World = object.Screen{
-		Width:   worldWidth,
-		Height:  worldHeight,
-		CenterX: worldWidth / 2,
-		CenterY: worldHeight / 2,
+		Width:   config.WorldWidth,
+		Height:  config.WorldHeight,
+		CenterX: config.WorldWidth / 2,
+		CenterY: config.WorldHeight / 2,
 	}
 	world.Screen = world.World
 
@@ -127,7 +117,7 @@ func (s *Server) Run(ctx context.Context) {
 	lastTime := time.Now()
 
 	// Add asteroid spawner
-	s.world.AddObject(object.NewAsteroidSpawner(InitialAsteroidTarget))
+	s.world.AddObject(object.NewAsteroidSpawner(config.InitialAsteroidTarget))
 
 	for {
 		select {
@@ -154,8 +144,8 @@ func (s *Server) Run(ctx context.Context) {
 
 		// Frame timing
 		elapsed := time.Since(frameStart)
-		if elapsed < serverTickTime {
-			time.Sleep(serverTickTime - elapsed)
+		if elapsed < config.ServerTickTime {
+			time.Sleep(config.ServerTickTime - elapsed)
 		}
 	}
 }
@@ -255,12 +245,12 @@ func (s *Server) SpawnPlayer(clientID int) {
 	}
 
 	// Create new player at random location
-	x := rand.Float64() * float64(worldWidth)
-	y := rand.Float64() * float64(worldHeight)
+	x := rand.Float64() * float64(config.WorldWidth)
+	y := rand.Float64() * float64(config.WorldHeight)
 	player := object.NewUser(x, y)
 	player.OwnerID = clientID
 	handle.Player = player
-	handle.InvincibleTime = InvincibilitySeconds // Grant spawn invincibility
+	handle.InvincibleTime = config.InvincibilitySeconds // Grant spawn invincibility
 	s.world.AddObject(player)
 }
 
