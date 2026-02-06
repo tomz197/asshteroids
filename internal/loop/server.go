@@ -61,6 +61,7 @@ type ClientEventType int
 const (
 	EventPlayerDied ClientEventType = iota
 	EventScoreAdd
+	EventServerShutdown
 )
 
 // WorldSnapshot is an immutable snapshot of the world state for rendering.
@@ -134,10 +135,46 @@ func (s *Server) Run() {
 	}
 }
 
-// Stop signals the server to stop.
+// Stop signals the server to stop immediately.
 func (s *Server) Stop() {
 	s.running = false
 	close(s.stopCh)
+}
+
+// Shutdown gracefully shuts down the server by notifying all connected clients
+// and waiting for them to disconnect (up to the given timeout).
+func (s *Server) Shutdown(timeout time.Duration) {
+	// Notify all connected clients about the shutdown
+	s.mu.RLock()
+	for _, handle := range s.clients {
+		select {
+		case handle.EventsCh <- ClientEvent{Type: EventServerShutdown}:
+		default:
+		}
+	}
+	s.mu.RUnlock()
+
+	// Wait for all clients to disconnect, or timeout
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deadline:
+			// Timeout reached, force stop
+			s.Stop()
+			return
+		case <-ticker.C:
+			s.mu.RLock()
+			remaining := len(s.clients)
+			s.mu.RUnlock()
+			if remaining == 0 {
+				s.Stop()
+				return
+			}
+		}
+	}
 }
 
 // RegisterClient registers a new client and returns its handle.

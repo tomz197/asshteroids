@@ -12,9 +12,10 @@ import (
 type GameState int
 
 const (
-	GameStateStart   GameState = iota // Title screen
-	GameStatePlaying                  // Active gameplay
-	GameStateDead                     // Player died, show restart prompt
+	GameStateStart    GameState = iota // Title screen
+	GameStatePlaying                   // Active gameplay
+	GameStateDead                      // Player died, show restart prompt
+	GameStateShutdown                  // Server is shutting down
 )
 
 // WorldState holds shared game state (objects, world bounds, timing).
@@ -45,6 +46,7 @@ type ClientState struct {
 	termSizeFunc   draw.TermSizeFunc // Function to get terminal size
 	Running        bool              // Client loop running
 	delta          time.Duration     // Frame delta time (client-side)
+	shutdownTimer  float64           // Countdown before auto-disconnect on shutdown
 }
 
 // State holds all game state for single-player backward compatibility.

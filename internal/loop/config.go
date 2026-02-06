@@ -21,3 +21,8 @@ const (
 const (
 	InitialAsteroidTarget = 250
 )
+
+// Shutdown
+const (
+	shutdownDisplaySeconds = 10.0 // Seconds to show shutdown message before auto-disconnect
+)

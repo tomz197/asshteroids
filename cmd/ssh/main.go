@@ -86,12 +86,14 @@ func main() {
 	<-done
 	log.Println("Shutting down server...")
 
-	// Stop the game server
+	// Gracefully shut down the game server: notify players and wait for them to disconnect
 	if gameServer != nil {
-		gameServer.Stop()
+		log.Println("Notifying connected players about shutdown...")
+		gameServer.Shutdown(15 * time.Second)
+		log.Println("Game server stopped")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := s.Shutdown(ctx); err != nil {

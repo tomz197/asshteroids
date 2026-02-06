@@ -102,6 +102,8 @@ func (c *Client) Run() error {
 			c.updatePlayingState()
 		case GameStateDead:
 			c.updateDeadState()
+		case GameStateShutdown:
+			c.updateShutdownState()
 		}
 
 		// Draw frame
@@ -154,6 +156,9 @@ func (c *Client) processServerEvents() {
 				c.state.Player = nil
 			case EventScoreAdd:
 				c.state.Score += event.ScoreAdd
+			case EventServerShutdown:
+				c.state.GameState = GameStateShutdown
+				c.state.shutdownTimer = shutdownDisplaySeconds
 			}
 		default:
 			return
@@ -233,6 +238,14 @@ func (c *Client) startGame() {
 	c.state.GameState = GameStatePlaying
 }
 
+// updateShutdownState handles the shutdown screen countdown.
+func (c *Client) updateShutdownState() {
+	c.state.shutdownTimer -= c.state.delta.Seconds()
+	if c.state.shutdownTimer <= 0 {
+		c.state.Running = false
+	}
+}
+
 // drawFrame draws the current frame.
 func (c *Client) drawFrame() error {
 	draw.ClearScreen(c.writer)
@@ -284,6 +297,8 @@ func (c *Client) drawUI() {
 		c.drawPlayingHUD(termWidth, termHeight)
 	case GameStateDead:
 		c.drawDeadScreen(centerX, centerY)
+	case GameStateShutdown:
+		c.drawShutdownScreen(centerX, centerY)
 	}
 }
 
@@ -346,4 +361,28 @@ func (c *Client) drawDeadScreen(centerX, centerY int) {
 	}
 	draw.MoveCursor(c.writer, centerX-len(prompt)/2, centerY+2)
 	fmt.Fprint(c.writer, prompt)
+}
+
+// drawShutdownScreen draws the server shutdown notification screen.
+func (c *Client) drawShutdownScreen(centerX, centerY int) {
+	title := "SERVER SHUTTING DOWN"
+	draw.MoveCursor(c.writer, centerX-len(title)/2, centerY-3)
+	fmt.Fprint(c.writer, title)
+
+	msg1 := "The server is restarting for maintenance."
+	draw.MoveCursor(c.writer, centerX-len(msg1)/2, centerY-1)
+	fmt.Fprint(c.writer, msg1)
+
+	msg2 := "Please reconnect in a moment."
+	draw.MoveCursor(c.writer, centerX-len(msg2)/2, centerY)
+	fmt.Fprint(c.writer, msg2)
+
+	remaining := int(c.state.shutdownTimer) + 1
+	countdown := fmt.Sprintf("Disconnecting in %d seconds...", remaining)
+	draw.MoveCursor(c.writer, centerX-len(countdown)/2, centerY+2)
+	fmt.Fprint(c.writer, countdown)
+
+	hint := "Press Q to disconnect now"
+	draw.MoveCursor(c.writer, centerX-len(hint)/2, centerY+4)
+	fmt.Fprint(c.writer, hint)
 }

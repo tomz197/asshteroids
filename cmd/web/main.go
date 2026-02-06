@@ -222,7 +222,7 @@ const htmlPage = `<!DOCTYPE html>
 
     <div class="container">
         <h1>ASSHTEROIDS</h1>
-        <p class="subtitle">Asteroids over SSH</p>
+        <p class="subtitle">Multiplayer Asteroids over SSH</p>
 
         <div class="terminal-box">
             <div class="terminal-header">
