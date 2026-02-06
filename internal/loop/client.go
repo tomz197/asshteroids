@@ -335,17 +335,69 @@ func (c *Client) drawInactivityScreen(centerX, centerY int) {
 
 // drawStartScreen draws the title screen.
 func (c *Client) drawStartScreen(centerX, centerY int) {
-	title := "A S T E R O I D S"
-	draw.MoveCursor(c.writer, centerX-len(title)/2, centerY-2)
-	fmt.Fprint(c.writer, title)
+	// ASCII art title (figlet "small" font)
+	titleArt := []string{
+		`    _   ___ ___ _  _ _____ ___ ___  ___ ___ ___  ___  `,
+		`   /_\ / __/ __| || |_   _| __| _ \/ _ \_ _|   \/ __| `,
+		`  / _ \\__ \__ \ __ | | | | _||   / (_) | || |) \__ \ `,
+		` /_/ \_\___/___/_||_| |_| |___|_|_\\___/___|___/|___/ `,
+		`                                                      `,
+	}
 
-	subtitle := "Press SPACE to Start"
-	draw.MoveCursor(c.writer, centerX-len(subtitle)/2, centerY+1)
+	// Find max width for centering
+	titleWidth := 0
+	for _, line := range titleArt {
+		if len(line) > titleWidth {
+			titleWidth = len(line)
+		}
+	}
+
+	// Draw title art centered
+	titleStartY := centerY - 7
+	for i, line := range titleArt {
+		draw.MoveCursor(c.writer, centerX-titleWidth/2, titleStartY+i)
+		fmt.Fprint(c.writer, line)
+	}
+
+	// Subtitle
+	subtitle := "~ Multiplayer Asteroids over SSH ~"
+	draw.MoveCursor(c.writer, centerX-len(subtitle)/2, titleStartY+len(titleArt)+1)
 	fmt.Fprint(c.writer, subtitle)
 
-	controls := "Controls: A/D or Arrows to rotate, W or Up to thrust, SPACE to shoot, Q to quit"
-	draw.MoveCursor(c.writer, centerX-len(controls)/2, centerY+4)
-	fmt.Fprint(c.writer, controls)
+	// Controls section
+	controlsY := titleStartY + len(titleArt) + 3
+	controlHeader := "Controls"
+	draw.MoveCursor(c.writer, centerX-len(controlHeader)/2, controlsY)
+	fmt.Fprint(c.writer, controlHeader)
+
+	controlLines := []string{
+		"W / Up  . . . . Thrust",
+		"A D / < >  . .  Rotate",
+		"SPACE  . . . . . Shoot",
+		"Q  . . . . . . .  Quit",
+	}
+	for i, line := range controlLines {
+		draw.MoveCursor(c.writer, centerX-len(line)/2, controlsY+1+i)
+		fmt.Fprint(c.writer, line)
+	}
+
+	// Blinking start prompt
+	if time.Now().UnixMilli()/600%2 == 0 {
+		prompt := ">>  Press SPACE to Start  <<"
+		draw.MoveCursor(c.writer, centerX-len(prompt)/2, controlsY+len(controlLines)+2)
+		fmt.Fprint(c.writer, prompt)
+	}
+
+	// GitHub link (OSC 8 clickable hyperlink)
+	ghURL := "https://github.com/tomz197/asshteroids"
+	ghLabel := "Click to view on github"
+	ghLine := fmt.Sprintf("\033]8;;%s\033\\%s\033]8;;\033\\", ghURL, ghLabel)
+	draw.MoveCursor(c.writer, centerX-len(ghLabel)/2, controlsY+len(controlLines)+4)
+	fmt.Fprint(c.writer, ghLine)
+	ghLabel2 := "github.com/tomz197/asshteroids"
+	ghLine2 := fmt.Sprintf("\033]8;;%s\033\\%s\033]8;;\033\\", ghURL, ghLabel2)
+	draw.MoveCursor(c.writer, centerX-len(ghLabel2)/2, controlsY+len(controlLines)+5)
+	fmt.Fprint(c.writer, ghLine2)
 }
 
 // drawPlayingHUD draws the in-game HUD.
@@ -377,27 +429,63 @@ func (c *Client) drawPlayingHUD(termWidth, termHeight int) {
 
 // drawDeadScreen draws the death/game over screen.
 func (c *Client) drawDeadScreen(centerX, centerY int) {
-	var title string
+	var titleArt []string
 	if c.state.Lives > 0 {
-		title = "YOU DIED"
+		titleArt = []string{
+			` __   _____  _   _   ___ ___ ___ ___   `,
+			` \ \ / / _ \| | | | |   \_ _| __|   \  `,
+			`  \ V / (_) | |_| | | |) | || _|| |) | `,
+			`   |_| \___/ \___/  |___/___|___|___/  `,
+			`                                       `,
+		}
 	} else {
-		title = "GAME OVER"
+		titleArt = []string{
+			`   ___   _   __  __ ___    _____   _____ ___  `,
+			`  / __| /_\ |  \/  | __|  / _ \ \ / / __| _ \ `,
+			` | (_ |/ _ \| |\/| | _|  | (_) \ V /| _||   / `,
+			`  \___/_/ \_\_|  |_|___|  \___/ \_/ |___|_|_\ `,
+			`                                              `,
+		}
 	}
-	draw.MoveCursor(c.writer, centerX-len(title)/2, centerY-2)
-	fmt.Fprint(c.writer, title)
 
+	// Find max width for centering
+	titleWidth := 0
+	for _, line := range titleArt {
+		if len(line) > titleWidth {
+			titleWidth = len(line)
+		}
+	}
+
+	// Draw title art
+	titleStartY := centerY - 6
+	for i, line := range titleArt {
+		draw.MoveCursor(c.writer, centerX-titleWidth/2, titleStartY+i)
+		fmt.Fprint(c.writer, line)
+	}
+
+	// Score
 	scoreText := fmt.Sprintf("Score: %d", c.state.Score)
-	draw.MoveCursor(c.writer, centerX-len(scoreText)/2, centerY)
+	draw.MoveCursor(c.writer, centerX-len(scoreText)/2, titleStartY+len(titleArt)+1)
 	fmt.Fprint(c.writer, scoreText)
 
-	var prompt string
+	// Lives or game over info
 	if c.state.Lives > 0 {
-		prompt = fmt.Sprintf("Lives remaining: %d - Press SPACE to continue", c.state.Lives)
-	} else {
-		prompt = "Press SPACE to Restart"
+		livesText := fmt.Sprintf("Lives remaining: %d", c.state.Lives)
+		draw.MoveCursor(c.writer, centerX-len(livesText)/2, titleStartY+len(titleArt)+3)
+		fmt.Fprint(c.writer, livesText)
 	}
-	draw.MoveCursor(c.writer, centerX-len(prompt)/2, centerY+2)
-	fmt.Fprint(c.writer, prompt)
+
+	// Blinking prompt
+	if time.Now().UnixMilli()/600%2 == 0 {
+		var prompt string
+		if c.state.Lives > 0 {
+			prompt = ">>  Press SPACE to Continue  <<"
+		} else {
+			prompt = ">>  Press SPACE to Restart  <<"
+		}
+		draw.MoveCursor(c.writer, centerX-len(prompt)/2, titleStartY+len(titleArt)+5)
+		fmt.Fprint(c.writer, prompt)
+	}
 }
 
 // drawShutdownScreen draws the server shutdown notification screen.
