@@ -12,6 +12,7 @@
 .vscode/
 
 .cursorrules
+.cursor
 
 # Build artifacts
 ./web
