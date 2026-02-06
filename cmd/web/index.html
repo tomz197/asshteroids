@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASSHTEROIDS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-family: 'Share Tech Mono', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Animated starfield background */
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: 
+                radial-gradient(1px 1px at 20px 30px, #fff, transparent),
+                radial-gradient(1px 1px at 40px 70px, rgba(255,255,255,0.8), transparent),
+                radial-gradient(1px 1px at 50px 160px, rgba(255,255,255,0.6), transparent),
+                radial-gradient(1px 1px at 90px 40px, #fff, transparent),
+                radial-gradient(1px 1px at 130px 80px, rgba(255,255,255,0.7), transparent),
+                radial-gradient(2px 2px at 160px 120px, #fff, transparent),
+                radial-gradient(1px 1px at 200px 50px, rgba(255,255,255,0.5), transparent),
+                radial-gradient(1px 1px at 220px 180px, #fff, transparent),
+                radial-gradient(1px 1px at 280px 90px, rgba(255,255,255,0.9), transparent),
+                radial-gradient(2px 2px at 320px 200px, #fff, transparent);
+            background-size: 350px 220px;
+            animation: drift 60s linear infinite;
+        }
+
+        @keyframes drift {
+            from { transform: translateY(0); }
+            to { transform: translateY(-220px); }
+        }
+
+        .container {
+            text-align: center;
+            z-index: 1;
+            padding: 2rem;
+            max-width: 700px;
+        }
+
+        h1 {
+            font-family: 'VT323', monospace;
+            font-size: clamp(3rem, 12vw, 6rem);
+            letter-spacing: 0.15em;
+            color: #00ff88;
+            text-shadow: 
+                0 0 10px #00ff88,
+                0 0 20px #00ff8866,
+                0 0 40px #00ff8833;
+            margin-bottom: 0.5rem;
+            animation: flicker 4s infinite;
+        }
+
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            92% { opacity: 1; }
+            93% { opacity: 0.8; }
+            94% { opacity: 1; }
+            96% { opacity: 0.9; }
+            97% { opacity: 1; }
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: #888;
+            margin-bottom: 3rem;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+        }
+
+        .terminal-box {
+            background: #111118;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+            text-align: left;
+            box-shadow: 
+                0 4px 30px rgba(0, 255, 136, 0.1),
+                inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+
+        .terminal-header {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 1.5rem;
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .dot-red { background: #ff5f56; }
+        .dot-yellow { background: #ffbd2e; }
+        .dot-green { background: #27ca40; }
+
+        .command {
+            color: #00ff88;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .prompt {
+            color: #666;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.3rem;
+            background: #00ff88;
+            animation: blink 1s step-end infinite;
+            vertical-align: middle;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        .info {
+            color: #666;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .github-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 2rem;
+            padding: 0.8rem 1.5rem;
+            color: #ccc;
+            text-decoration: none;
+            border: 1px solid #333;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            font-size: 1rem;
+        }
+
+        .github-link:hover {
+            color: #fff;
+            border-color: #00ff88;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
+        }
+
+        .github-link svg {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        /* Floating asteroid decorations */
+        .asteroid {
+            position: fixed;
+            font-size: 2rem;
+            opacity: 0.15;
+            animation: float 20s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .asteroid:nth-child(1) { top: 15%; left: 10%; animation-delay: 0s; }
+        .asteroid:nth-child(2) { top: 70%; left: 85%; animation-delay: -7s; font-size: 1.5rem; }
+        .asteroid:nth-child(3) { top: 30%; left: 80%; animation-delay: -3s; font-size: 2.5rem; }
+        .asteroid:nth-child(4) { top: 80%; left: 15%; animation-delay: -11s; }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(180deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="stars"></div>
+    
+    <div class="asteroid">🪨</div>
+    <div class="asteroid">🪨</div>
+    <div class="asteroid">🪨</div>
+    <div class="asteroid">🪨</div>
+
+    <div class="container">
+        <h1>ASSHTEROIDS</h1>
+        <p class="subtitle">Multiplayer Asteroids over SSH</p>
+
+        <div class="terminal-box">
+            <div class="terminal-header">
+                <div class="terminal-dot dot-red"></div>
+                <div class="terminal-dot dot-yellow"></div>
+                <div class="terminal-dot dot-green"></div>
+            </div>
+            <div class="command">
+                <span class="prompt">$</span>
+                <span>ssh {{.SSHHost}}</span>
+                <span class="cursor"></span>
+            </div>
+            <p class="info">PTY allocation required (-t flag if needed)</p>
+        </div>
+
+        <a href="https://github.com/tomz197/asshteroids" target="_blank" rel="noopener" class="github-link">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            View on GitHub
+        </a>
+    </div>
+</body>
+</html>

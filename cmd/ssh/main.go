@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/activeterm"
 	"github.com/charmbracelet/wish/logging"
+	"github.com/tomz197/asteroids/internal/config"
 	"github.com/tomz197/asteroids/internal/draw"
 	"github.com/tomz197/asteroids/internal/loop"
 )
@@ -28,13 +29,16 @@ const (
 )
 
 // Global game server - shared by all SSH clients
-var gameServer *loop.Server
-var serverOnce sync.Once
+var (
+	gameServer   *loop.Server
+	cancelServer context.CancelFunc
+	serverOnce   sync.Once
+)
 
 func main() {
-	host := getEnv("SSH_HOST", defaultHost)
-	port := getEnv("SSH_PORT", defaultPort)
-	hostKeyPath := getEnv("SSH_HOST_KEY", defaultHostKeyPath)
+	host := config.GetEnv("SSH_HOST", defaultHost)
+	port := config.GetEnv("SSH_PORT", defaultPort)
+	hostKeyPath := config.GetEnv("SSH_HOST_KEY", defaultHostKeyPath)
 	workingDir, workErr := os.Getwd()
 	if workErr != nil {
 		log.Printf("Failed to get working directory: %v", workErr)
@@ -43,8 +47,10 @@ func main() {
 
 	// Initialize and start the shared game server
 	serverOnce.Do(func() {
+		var ctx context.Context
+		ctx, cancelServer = context.WithCancel(context.Background())
 		gameServer = loop.NewServer()
-		go gameServer.Run()
+		go gameServer.Run(ctx)
 		log.Println("Game server started")
 	})
 
@@ -90,6 +96,7 @@ func main() {
 	if gameServer != nil {
 		log.Println("Notifying connected players about shutdown...")
 		gameServer.Shutdown(15 * time.Second)
+		cancelServer()
 		log.Println("Game server stopped")
 	}
 
@@ -165,10 +172,3 @@ func (s *sizeTracker) getSize() (int, int, error) {
 
 // Ensure sizeTracker.getSize satisfies draw.TermSizeFunc
 var _ draw.TermSizeFunc = (*sizeTracker)(nil).getSize
-
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}

@@ -36,19 +36,7 @@ func MoveCursor(w io.Writer, x, y int) {
 	fmt.Fprintf(w, "\033[%d;%dH", y, x)
 }
 
-// TerminalSizeRaw returns the actual terminal dimensions without sub-pixel scaling.
-func TerminalSizeRaw() (width, height int, err error) {
-	return DefaultTermSizeFunc()
-}
-
 // TerminalSizeRawWith returns actual terminal dimensions using the provided size function.
 func TerminalSizeRawWith(sizeFunc TermSizeFunc) (width, height int, err error) {
 	return sizeFunc()
-}
-
-// DrawChar draws a single character at the given position (1-based coordinates).
-func DrawChar(w io.Writer, x, y int, ch rune) {
-	if x >= 1 && y >= 1 {
-		fmt.Fprintf(w, "\033[%d;%dH%c", y, x, ch)
-	}
 }

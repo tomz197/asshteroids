@@ -10,6 +10,7 @@ type Projectile struct {
 	VX, VY    float64 // Velocity
 	Lifetime  float64 // Seconds remaining before removal
 	Symbol    rune    // Character to display
+	OwnerID   int     // Client ID that fired this projectile
 	destroyed bool    // Marked for destruction
 }
 
@@ -24,7 +25,8 @@ const ProjectileRadius = 0.5
 
 // NewProjectile creates a projectile at position (x,y) traveling in direction angle.
 // The projectile inherits the shooter's velocity plus its own speed.
-func NewProjectile(x, y, angle, shooterVX, shooterVY float64) *Projectile {
+// ownerID identifies the client that fired it (for score attribution).
+func NewProjectile(x, y, angle, shooterVX, shooterVY float64, ownerID int) *Projectile {
 	return &Projectile{
 		X:        x,
 		Y:        y,
@@ -32,6 +34,7 @@ func NewProjectile(x, y, angle, shooterVX, shooterVY float64) *Projectile {
 		VY:       shooterVY + math.Sin(angle)*ProjectileSpeed,
 		Lifetime: ProjectileLifetime,
 		Symbol:   '•',
+		OwnerID:  ownerID,
 	}
 }
 

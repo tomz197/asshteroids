@@ -72,29 +72,6 @@ func SpawnExplosion(x, y float64, count int, speed, lifetime float64, spawner Sp
 	}
 }
 
-// SpawnDebris creates particles that fly outward from a destroyed object.
-func SpawnDebris(x, y, baseVX, baseVY float64, count int, spawner Spawner) {
-	if spawner == nil {
-		return
-	}
-
-	for i := 0; i < count; i++ {
-		// Random direction with some inheritance from base velocity
-		angle := rand.Float64() * 2 * math.Pi
-		speed := 5.0 + rand.Float64()*15.0
-		lifetime := 0.3 + rand.Float64()*0.5
-
-		vx := baseVX*0.3 + math.Cos(angle)*speed
-		vy := baseVY*0.3 + math.Sin(angle)*speed
-
-		symbols := []rune{'.', '*', '+', 'x'}
-		symbol := symbols[rand.Intn(len(symbols))]
-		p := NewParticle(x, y, vx, vy, lifetime, symbol)
-		p.Drag = 0.9
-		spawner.Spawn(p)
-	}
-}
-
 // SpawnThrust creates particles behind a thrusting ship.
 func SpawnThrust(x, y, angle float64, spawner Spawner) {
 	if spawner == nil {

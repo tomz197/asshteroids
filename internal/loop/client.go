@@ -16,7 +16,7 @@ const clientTargetFrameTime = time.Second / clientTargetFPS
 
 // Client handles rendering and input for a single connection.
 type Client struct {
-	server       *Server
+	server       GameServer
 	handle       *ClientHandle
 	state        *ClientState
 	canvas       *draw.Canvas
@@ -32,7 +32,7 @@ type ClientOptions struct {
 }
 
 // NewClient creates a new client connected to the given server.
-func NewClient(server *Server, r *bufio.Reader, w io.Writer, opts ClientOptions) *Client {
+func NewClient(server GameServer, r *bufio.Reader, w io.Writer, opts ClientOptions) *Client {
 	termSizeFunc := opts.TermSizeFunc
 	if termSizeFunc == nil {
 		termSizeFunc = draw.DefaultTermSizeFunc
@@ -198,9 +198,6 @@ func (c *Client) updatePlayingState() {
 		px, py := c.state.Player.GetPosition()
 		c.state.Camera.X = px
 		c.state.Camera.Y = py
-	} else {
-		// Player was removed by server (died)
-		// Wait for server event to change state
 	}
 }
 

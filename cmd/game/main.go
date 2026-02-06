@@ -21,7 +21,7 @@ func main() {
 	}()
 
 	reader := bufio.NewReader(os.Stdin)
-	if err := loop.Run(reader, os.Stdout); err != nil {
+	if err := loop.RunClientServer(reader, os.Stdout, loop.ClientOptions{}); err != nil {
 		fmt.Fprintf(os.Stderr, "game error: %v\n", err)
 		os.Exit(1)
 	}

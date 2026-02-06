@@ -196,7 +196,10 @@ func (a *Asteroid) Draw(ctx DrawContext) error {
 // drawAt draws the asteroid at a specific screen position.
 func (a *Asteroid) drawAt(ctx DrawContext, screenX, screenY float64) {
 	numVerts := len(a.Vertices)
-	points := make([]draw.Point, numVerts)
+
+	// Use reusable buffer from canvas to avoid per-frame allocations.
+	// Safe for concurrent rendering because each client has its own Canvas.
+	points := ctx.Canvas.BorrowPoints(numVerts)
 
 	for i, dist := range a.Vertices {
 		// Angle for this vertex
@@ -209,11 +212,6 @@ func (a *Asteroid) drawAt(ctx DrawContext, screenX, screenY float64) {
 
 	// Draw to canvas (no aspect ratio needed with 2x vertical resolution)
 	ctx.Canvas.DrawPolygon(points, false)
-}
-
-// Hit marks the asteroid as destroyed.
-func (a *Asteroid) Hit() {
-	a.Destroyed = true
 }
 
 // MarkDestroyed marks the asteroid for removal (implements Destructible).

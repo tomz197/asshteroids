@@ -21,6 +21,9 @@ type User struct {
 	// Shooting
 	FireRate     float64 // Minimum seconds between shots
 	fireCooldown float64 // Time until next shot allowed
+
+	// Ownership
+	OwnerID int // Client ID that owns this ship (for projectile attribution)
 }
 
 // NewUser creates a new spaceship at the given position.
@@ -100,7 +103,7 @@ func (u *User) Update(ctx UpdateContext) (bool, error) {
 		noseX := u.X + math.Cos(u.Angle)*u.Size
 		noseY := u.Y + math.Sin(u.Angle)*u.Size
 
-		projectile := NewProjectile(noseX, noseY, u.Angle, u.VX, u.VY)
+		projectile := NewProjectile(noseX, noseY, u.Angle, u.VX, u.VY, u.OwnerID)
 		ctx.Spawner.Spawn(projectile)
 	}
 
@@ -131,12 +134,12 @@ func (u *User) drawAt(ctx DrawContext, screenX, screenY float64) {
 
 	size := u.Size
 
-	// Calculate vertex positions in screen space
-	triangle := []draw.Point{
-		{X: screenX + math.Cos(noseAngle)*size, Y: screenY + math.Sin(noseAngle)*size},
-		{X: screenX + math.Cos(leftAngle)*size*0.7, Y: screenY + math.Sin(leftAngle)*size*0.7},
-		{X: screenX + math.Cos(rightAngle)*size*0.7, Y: screenY + math.Sin(rightAngle)*size*0.7},
-	}
+	// Use reusable buffer from canvas to avoid per-frame allocations.
+	// Safe for concurrent rendering because each client has its own Canvas.
+	triangle := ctx.Canvas.BorrowPoints(3)
+	triangle[0] = draw.Point{X: screenX + math.Cos(noseAngle)*size, Y: screenY + math.Sin(noseAngle)*size}
+	triangle[1] = draw.Point{X: screenX + math.Cos(leftAngle)*size*0.7, Y: screenY + math.Sin(leftAngle)*size*0.7}
+	triangle[2] = draw.Point{X: screenX + math.Cos(rightAngle)*size*0.7, Y: screenY + math.Sin(rightAngle)*size*0.7}
 
 	// Draw the triangle to canvas
 	ctx.Canvas.DrawPolygon(triangle, true)
@@ -152,12 +155,3 @@ func (u *User) GetRadius() float64 {
 	return u.Size * 0.6 // Slightly smaller than visual size for fairness
 }
 
-// Reset resets the ship to center with no velocity.
-func (u *User) Reset(x, y float64) {
-	u.X = x
-	u.Y = y
-	u.VX = 0
-	u.VY = 0
-	u.Angle = -math.Pi / 2
-	u.fireCooldown = 0
-}

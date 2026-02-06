@@ -1,16 +1,31 @@
 package loop
 
 import (
+	"context"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/tomz197/asteroids/internal/object"
+	"github.com/tomz197/asteroids/internal/physics"
 )
 
 const serverTickRate = 60
 const serverTickTime = time.Second / serverTickRate
+
+// GameServer is the interface clients use to communicate with the game server.
+// Decouples the Client from the concrete Server implementation, enabling
+// testing and potential network-based server implementations.
+type GameServer interface {
+	RegisterClient() *ClientHandle
+	UnregisterClient(clientID int)
+	SendInput(clientID int, input object.Input)
+	GetSnapshot() *WorldSnapshot
+	GetClientPlayer(clientID int) *object.User
+	SpawnPlayer(clientID int)
+	RemovePlayer(clientID int)
+}
 
 // Server manages the shared world state and processes inputs from all clients.
 type Server struct {
@@ -22,8 +37,6 @@ type Server struct {
 	registerCh   chan *ClientHandle
 	unregisterCh chan int
 	mu           sync.RWMutex
-	running      bool
-	stopCh       chan struct{}
 
 	// Double-buffered snapshot objects to avoid allocations
 	snapshotBufs [2][]object.Object
@@ -31,7 +44,13 @@ type Server struct {
 
 	// Objects marked for removal (deferred compaction)
 	toRemove map[object.Object]struct{}
+
+	// Reusable player set to avoid per-frame allocation
+	playerSet map[object.Object]struct{}
 }
+
+// Compile-time check that Server implements GameServer.
+var _ GameServer = (*Server)(nil)
 
 // ClientHandle represents a client's connection to the server.
 type ClientHandle struct {
@@ -89,8 +108,8 @@ func NewServer() *Server {
 		inputChan:    make(chan ClientInput, 256),
 		registerCh:   make(chan *ClientHandle, 16),
 		unregisterCh: make(chan int, 16),
-		stopCh:       make(chan struct{}),
 		toRemove:     make(map[object.Object]struct{}),
+		playerSet:    make(map[object.Object]struct{}),
 	}
 
 	// Create initial empty snapshot
@@ -102,15 +121,20 @@ func NewServer() *Server {
 	return s
 }
 
-// Run starts the server loop. Blocks until Stop() is called.
-func (s *Server) Run() {
-	s.running = true
+// Run starts the server loop. Blocks until the context is cancelled.
+func (s *Server) Run(ctx context.Context) {
 	lastTime := time.Now()
 
 	// Add asteroid spawner
 	s.world.AddObject(object.NewAsteroidSpawner(InitialAsteroidTarget))
 
-	for s.running {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		frameStart := time.Now()
 		s.world.Delta = frameStart.Sub(lastTime)
 		lastTime = frameStart
@@ -135,14 +159,9 @@ func (s *Server) Run() {
 	}
 }
 
-// Stop signals the server to stop immediately.
-func (s *Server) Stop() {
-	s.running = false
-	close(s.stopCh)
-}
-
 // Shutdown gracefully shuts down the server by notifying all connected clients
 // and waiting for them to disconnect (up to the given timeout).
+// The caller should cancel the server context after Shutdown returns.
 func (s *Server) Shutdown(timeout time.Duration) {
 	// Notify all connected clients about the shutdown
 	s.mu.RLock()
@@ -162,15 +181,12 @@ func (s *Server) Shutdown(timeout time.Duration) {
 	for {
 		select {
 		case <-deadline:
-			// Timeout reached, force stop
-			s.Stop()
 			return
 		case <-ticker.C:
 			s.mu.RLock()
 			remaining := len(s.clients)
 			s.mu.RUnlock()
 			if remaining == 0 {
-				s.Stop()
 				return
 			}
 		}
@@ -241,6 +257,7 @@ func (s *Server) SpawnPlayer(clientID int) {
 	x := rand.Float64() * float64(worldWidth)
 	y := rand.Float64() * float64(worldHeight)
 	player := object.NewUser(x, y)
+	player.OwnerID = clientID
 	handle.Player = player
 	handle.InvincibleTime = InvincibilitySeconds // Grant spawn invincibility
 	s.world.AddObject(player)
@@ -320,10 +337,12 @@ func (s *Server) updateWorld() {
 
 	// Decrement invincibility timers and build player set for O(1) lookup
 	dt := s.world.Delta.Seconds()
-	playerSet := make(map[object.Object]struct{}, len(s.clients))
+
+	// Reuse player set to avoid per-frame allocation
+	clear(s.playerSet)
 	for _, handle := range s.clients {
 		if handle.Player != nil {
-			playerSet[handle.Player] = struct{}{}
+			s.playerSet[handle.Player] = struct{}{}
 		}
 		if handle.InvincibleTime > 0 {
 			handle.InvincibleTime -= dt
@@ -363,7 +382,7 @@ func (s *Server) updateWorld() {
 	kept := s.world.Objects[:0]
 	for _, obj := range s.world.Objects {
 		// Skip players - already updated (O(1) lookup)
-		if _, isPlayer := playerSet[obj]; isPlayer {
+		if _, isPlayer := s.playerSet[obj]; isPlayer {
 			kept = append(kept, obj)
 			continue
 		}
@@ -402,19 +421,15 @@ func (s *Server) checkCollisions() {
 			if a.IsDestroyed() || a.IsProtected() {
 				continue
 			}
-			if collides(p.X, p.Y, 0, a.X, a.Y, a.GetRadius()) {
+			if physics.PointInCircle(p.X, p.Y, a.X, a.Y, a.GetRadius()) {
 				p.MarkDestroyed()
 				a.MarkDestroyed()
 
-				// Find which client owns this projectile and award score
-				for _, handle := range s.clients {
-					if handle.Player != nil {
-						// For now, award to all playing clients
-						// In future, track projectile ownership
-						select {
-						case handle.EventsCh <- ClientEvent{Type: EventScoreAdd, ScoreAdd: asteroidScore(a.Size)}:
-						default:
-						}
+				// Award score to the client that owns this projectile
+				if handle, ok := s.clients[p.OwnerID]; ok {
+					select {
+					case handle.EventsCh <- ClientEvent{Type: EventScoreAdd, ScoreAdd: asteroidScore(a.Size)}:
+					default:
 					}
 				}
 			}
@@ -437,12 +452,12 @@ func (s *Server) checkCollisions() {
 
 		hit := false
 
-		// Check projectile hits
+		// Check projectile hits (skip own projectiles)
 		for _, p := range projectiles {
-			if p.IsDestroyed() {
+			if p.IsDestroyed() || p.OwnerID == handle.ID {
 				continue
 			}
-			if collides(p.X, p.Y, 0, px, py, pr) {
+			if physics.PointInCircle(p.X, p.Y, px, py, pr) {
 				p.MarkDestroyed()
 				hit = true
 				break
@@ -455,7 +470,7 @@ func (s *Server) checkCollisions() {
 				if a.IsDestroyed() || a.IsProtected() {
 					continue
 				}
-				if collides(px, py, pr, a.X, a.Y, a.GetRadius()) {
+				if physics.CirclesOverlap(px, py, pr, a.X, a.Y, a.GetRadius()) {
 					hit = true
 					break
 				}
@@ -489,15 +504,6 @@ func (s *Server) checkCollisions() {
 		}
 		s.world.Objects = kept
 	}
-}
-
-// collides checks if two circles overlap (or point in circle if r1 == 0).
-func collides(x1, y1, r1, x2, y2, r2 float64) bool {
-	dx := x2 - x1
-	dy := y2 - y1
-	dist := dx*dx + dy*dy
-	minDist := r1 + r2
-	return dist < minDist*minDist
 }
 
 // createSnapshot creates an immutable snapshot of the world state.

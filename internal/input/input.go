@@ -147,12 +147,16 @@ parse:
 	return input
 }
 
+// ResetKeyInput resets all key state and drains any pending bytes from the channel.
 func ResetKeyInput(s *Stream) {
 	s.state = keyState{numberVal: -1}
-	buf := []byte{128}
-	for i := range buf {
-		b := buf[i]
-		applyByteToState(&s.state, b, time.Now())
+	// Drain any pending bytes so stale input doesn't carry over
+	for {
+		select {
+		case <-s.ch:
+		default:
+			return
+		}
 	}
 }
 

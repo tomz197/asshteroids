@@ -26,6 +26,7 @@ type Canvas struct {
 	renderBuf       strings.Builder // Buffer for batching render output
 	scaledBuf       []Point         // Reusable buffer for fillPolygon scaled points
 	intersectionBuf []float64       // Reusable buffer for scanline intersections
+	polygonBuf      []Point         // Reusable buffer for polygon point generation
 }
 
 // NewCanvas creates a canvas for the given terminal dimensions.
@@ -95,11 +96,6 @@ func (c *Canvas) SetFloat(x, y float64) {
 	c.setPixel(px, py)
 }
 
-// SetFloatWithOffset sets a pixel using float logical coordinates with camera offset applied.
-func (c *Canvas) SetFloatWithOffset(x, y, offsetX, offsetY float64) {
-	c.SetFloat(x-offsetX, y-offsetY)
-}
-
 // DrawLine draws a line on the canvas using Bresenham's algorithm.
 // Coordinates are in logical space and get scaled to pixels.
 func (c *Canvas) DrawLine(p1, p2 Point) {
@@ -158,21 +154,6 @@ func (c *Canvas) DrawPolygon(points []Point, filled bool) {
 	for i := 0; i < n; i++ {
 		c.DrawLine(points[i], points[(i+1)%n])
 	}
-}
-
-// DrawPolygonWithOffset draws a polygon with camera offset applied.
-func (c *Canvas) DrawPolygonWithOffset(points []Point, filled bool, offsetX, offsetY float64) {
-	if len(points) < 3 {
-		return
-	}
-
-	// Apply offset to all points
-	offsetPoints := make([]Point, len(points))
-	for i, p := range points {
-		offsetPoints[i] = Point{X: p.X - offsetX, Y: p.Y - offsetY}
-	}
-
-	c.DrawPolygon(offsetPoints, filled)
 }
 
 // fillPolygon fills a polygon using scanline algorithm.
@@ -307,4 +288,15 @@ func (c *Canvas) TerminalWidth() int {
 // TerminalHeight returns the actual terminal row count.
 func (c *Canvas) TerminalHeight() int {
 	return c.termHeight
+}
+
+// BorrowPoints returns a reusable slice of Points with the given length.
+// The returned slice is only valid until the next call to BorrowPoints.
+// This avoids per-frame allocations for polygon rendering.
+// Thread-safe as long as each goroutine uses its own Canvas instance.
+func (c *Canvas) BorrowPoints(n int) []Point {
+	if cap(c.polygonBuf) < n {
+		c.polygonBuf = make([]Point, n)
+	}
+	return c.polygonBuf[:n]
 }

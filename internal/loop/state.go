@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/tomz197/asteroids/internal/draw"
-	"github.com/tomz197/asteroids/internal/input"
 	"github.com/tomz197/asteroids/internal/object"
 )
 
@@ -49,14 +48,6 @@ type ClientState struct {
 	shutdownTimer  float64           // Countdown before auto-disconnect on shutdown
 }
 
-// State holds all game state for single-player backward compatibility.
-// Combines WorldState and ClientState for the legacy single-threaded loop.
-type State struct {
-	WorldState
-	ClientState
-	InputStream *input.Stream // Input stream (legacy single-player only)
-}
-
 // NewWorldState creates a new initialized world state.
 func NewWorldState() *WorldState {
 	return &WorldState{
@@ -70,15 +61,6 @@ func NewClientState() *ClientState {
 		GameState: GameStateStart,
 		Lives:     InitialLives,
 		Running:   true,
-	}
-}
-
-// NewState creates a new initialized game state (world + single client).
-// Used for backward-compatible single-player mode.
-func NewState() *State {
-	return &State{
-		WorldState:  *NewWorldState(),
-		ClientState: *NewClientState(),
 	}
 }
 
@@ -97,16 +79,4 @@ func (w *WorldState) Spawn(obj object.Object) {
 func (w *WorldState) FlushSpawned() {
 	w.Objects = append(w.Objects, w.toSpawn...)
 	w.toSpawn = w.toSpawn[:0]
-}
-
-// UpdateContext creates an UpdateContext from the current state.
-// Used for single-player backward compatibility.
-func (s *State) UpdateContext() object.UpdateContext {
-	return object.UpdateContext{
-		Delta:   s.WorldState.Delta,
-		Input:   s.Input,
-		Screen:  s.Screen,
-		Spawner: &s.WorldState,
-		Objects: s.Objects,
-	}
 }
