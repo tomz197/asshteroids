@@ -12,3 +12,7 @@
 .vscode/
 
 .cursorrules
+
+# Build artifacts
+./web
+./ssh

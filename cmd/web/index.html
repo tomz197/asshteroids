@@ -3,7 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASSHTEROIDS</title>
+    <title>ASSHTEROIDS - Multiplayer Asteroids over SSH</title>
+    <meta name="description" content="Play classic Asteroids in your terminal. ASSHTEROIDS is a multiplayer arcade game you connect to via SSH — no install, no browser, just ssh and play.">
+    <meta name="keywords" content="asteroids, ssh game, terminal game, multiplayer, arcade, cli game, ssh, asshteroids">
+    <meta name="author" content="tomz197">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#0a0a0f">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="ASSHTEROIDS - Multiplayer Asteroids over SSH">
+    <meta property="og:description" content="Play classic Asteroids in your terminal. A multiplayer arcade game you connect to via SSH — no install, no browser, just ssh and play.">
+    <meta property="og:url" content="https://github.com/tomz197/asshteroids">
+    <meta property="og:site_name" content="ASSHTEROIDS">
+    <meta property="og:locale" content="en_US">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="ASSHTEROIDS - Multiplayer Asteroids over SSH">
+    <meta name="twitter:description" content="Play classic Asteroids in your terminal. A multiplayer arcade game you connect to via SSH — no install, no browser, just ssh and play.">
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://github.com/tomz197/asshteroids">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "ASSHTEROIDS",
+        "description": "Multiplayer Asteroids game played over SSH in your terminal. No install required — just connect and play.",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any (SSH client required)",
+        "url": "https://github.com/tomz197/asshteroids",
+        "author": {
+            "@type": "Person",
+            "name": "Tomas Zifcak",
+            "url": "https://zifcak.dev"
+        },
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        }
+    }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -198,37 +243,43 @@
     </style>
 </head>
 <body>
-    <div class="stars"></div>
-    
-    <div class="asteroid">🪨</div>
-    <div class="asteroid">🪨</div>
-    <div class="asteroid">🪨</div>
-    <div class="asteroid">🪨</div>
+    <div class="stars" aria-hidden="true"></div>
 
-    <div class="container">
-        <h1>ASSHTEROIDS</h1>
-        <p class="subtitle">Multiplayer Asteroids over SSH</p>
+    <div class="asteroid" aria-hidden="true">🪨</div>
+    <div class="asteroid" aria-hidden="true">🪨</div>
+    <div class="asteroid" aria-hidden="true">🪨</div>
+    <div class="asteroid" aria-hidden="true">🪨</div>
 
-        <div class="terminal-box">
-            <div class="terminal-header">
-                <div class="terminal-dot dot-red"></div>
-                <div class="terminal-dot dot-yellow"></div>
-                <div class="terminal-dot dot-green"></div>
+    <main class="container">
+        <header>
+            <h1>ASSHTEROIDS</h1>
+            <p class="subtitle">Multiplayer Asteroids over SSH</p>
+        </header>
+
+        <section aria-label="How to connect">
+            <div class="terminal-box">
+                <div class="terminal-header" aria-hidden="true">
+                    <div class="terminal-dot dot-red"></div>
+                    <div class="terminal-dot dot-yellow"></div>
+                    <div class="terminal-dot dot-green"></div>
+                </div>
+                <div class="command">
+                    <span class="prompt">$</span>
+                    <code>ssh {{.SSHHost}}</code>
+                    <span class="cursor" aria-hidden="true"></span>
+                </div>
+                <p class="info">PTY allocation required (-t flag if needed)</p>
             </div>
-            <div class="command">
-                <span class="prompt">$</span>
-                <span>ssh {{.SSHHost}}</span>
-                <span class="cursor"></span>
-            </div>
-            <p class="info">PTY allocation required (-t flag if needed)</p>
-        </div>
+        </section>
 
-        <a href="https://github.com/tomz197/asshteroids" target="_blank" rel="noopener" class="github-link">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-            </svg>
-            View on GitHub
-        </a>
-    </div>
+        <nav aria-label="Project links">
+            <a href="https://github.com/tomz197/asshteroids" target="_blank" rel="noopener" class="github-link" aria-label="View ASSHTEROIDS source code on GitHub">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+                View on GitHub
+            </a>
+        </nav>
+    </main>
 </body>
 </html>
