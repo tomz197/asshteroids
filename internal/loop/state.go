@@ -46,6 +46,7 @@ type ClientState struct {
 	Running        bool              // Client loop running
 	delta          time.Duration     // Frame delta time (client-side)
 	shutdownTimer  float64           // Countdown before auto-disconnect on shutdown
+	isInactive     bool              // Whether the client is in inactive warning state
 }
 
 // NewWorldState creates a new initialized world state.

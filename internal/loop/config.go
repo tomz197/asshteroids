@@ -26,3 +26,9 @@ const (
 const (
 	shutdownDisplaySeconds = 10.0 // Seconds to show shutdown message before auto-disconnect
 )
+
+// Inactivity
+const (
+	InactivityWarnUser       = 90  // Seconds
+	InactivityDisconnectUser = 120 // Seconds
+)

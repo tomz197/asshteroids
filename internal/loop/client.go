@@ -23,6 +23,7 @@ type Client struct {
 	reader       *bufio.Reader
 	writer       io.Writer
 	inputStream  *input.Stream
+	lastInput    time.Time
 	termSizeFunc draw.TermSizeFunc
 }
 
@@ -67,6 +68,7 @@ func NewClient(server GameServer, r *bufio.Reader, w io.Writer, opts ClientOptio
 		canvas:       canvas,
 		reader:       r,
 		writer:       w,
+		lastInput:    time.Now(),
 		inputStream:  input.StartStream(r),
 		termSizeFunc: termSizeFunc,
 	}
@@ -128,6 +130,15 @@ func (c *Client) Run() error {
 // processInput reads input and sends it to the server.
 func (c *Client) processInput() {
 	c.state.Input = input.ReadInput(c.inputStream)
+
+	if len(c.state.Input.Pressed) > 0 {
+		c.lastInput = time.Now()
+		c.state.isInactive = false
+	} else if time.Since(c.lastInput).Seconds() > InactivityDisconnectUser {
+		c.state.Running = false
+	} else if time.Since(c.lastInput).Seconds() > InactivityWarnUser {
+		c.state.isInactive = true
+	}
 
 	if c.state.Input.Quit {
 		c.state.Running = false
@@ -287,6 +298,11 @@ func (c *Client) drawUI() {
 	centerX := termWidth / 2
 	centerY := termHeight / 2
 
+	if c.state.isInactive {
+		c.drawInactivityScreen(centerX, centerY)
+		return
+	}
+
 	switch c.state.GameState {
 	case GameStateShutdown:
 		c.drawShutdownScreen(centerX, centerY)
@@ -297,6 +313,24 @@ func (c *Client) drawUI() {
 	case GameStateDead:
 		c.drawDeadScreen(centerX, centerY)
 	}
+}
+
+// drawInactivityScreen draws the inactivity warning screen.
+func (c *Client) drawInactivityScreen(centerX, centerY int) {
+	title := "INACTIVITY WARNING"
+	draw.MoveCursor(c.writer, centerX-len(title)/2, centerY-2)
+	fmt.Fprint(c.writer, title)
+
+	msg := fmt.Sprintf(
+		"You have been inactive for too long. You will be disconnected in %d seconds.",
+		int(InactivityDisconnectUser-time.Since(c.lastInput).Seconds()),
+	)
+	draw.MoveCursor(c.writer, centerX-len(msg)/2, centerY)
+	fmt.Fprint(c.writer, msg)
+
+	hint := "Press any key to continue"
+	draw.MoveCursor(c.writer, centerX-len(hint)/2, centerY+2)
+	fmt.Fprint(c.writer, hint)
 }
 
 // drawStartScreen draws the title screen.
