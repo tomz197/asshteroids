@@ -288,14 +288,14 @@ func (c *Client) drawUI() {
 	centerY := termHeight / 2
 
 	switch c.state.GameState {
-	case GameStateStart:
-		c.drawStartScreen(centerX, centerY)
-	case GameStatePlaying:
-		c.drawPlayingHUD(termWidth, termHeight)
-	case GameStateDead:
-		c.drawDeadScreen(centerX, centerY)
 	case GameStateShutdown:
 		c.drawShutdownScreen(centerX, centerY)
+	case GameStatePlaying:
+		c.drawPlayingHUD(termWidth, termHeight)
+	case GameStateStart:
+		c.drawStartScreen(centerX, centerY)
+	case GameStateDead:
+		c.drawDeadScreen(centerX, centerY)
 	}
 }
 
