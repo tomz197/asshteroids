@@ -22,10 +22,11 @@ type WorldState struct {
 
 // WorldSnapshot is an immutable snapshot of the world state for rendering.
 type WorldSnapshot struct {
-	Objects []object.Object
-	Players int
-	World   object.Screen
-	Delta   time.Duration
+	Objects     []object.Object
+	UserObjects []*object.User
+	Players     int
+	World       object.Screen
+	Delta       time.Duration
 }
 
 // NewWorldState creates a new initialized world state.

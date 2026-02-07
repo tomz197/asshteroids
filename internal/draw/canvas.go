@@ -290,6 +290,14 @@ func (c *Canvas) TerminalHeight() int {
 	return c.termHeight
 }
 
+// LogicalToTerminal converts logical coordinates to 1-based terminal position (col, row).
+// This is useful for placing text overlays at positions matching canvas-drawn objects.
+func (c *Canvas) LogicalToTerminal(x, y float64) (col, row int) {
+	px := int(math.Round(x * c.scaleX))
+	py := int(math.Round(y * c.scaleY))
+	return px + 1, py/2 + 1
+}
+
 // BorrowPoints returns a reusable slice of Points with the given length.
 // The returned slice is only valid until the next call to BorrowPoints.
 // This avoids per-frame allocations for polygon rendering.

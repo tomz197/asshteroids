@@ -40,6 +40,9 @@ func (c *Client) drawFrame() error {
 	// Render canvas to terminal
 	c.canvas.Render(c.writer)
 
+	// Draw usernames above other players' ships
+	c.drawPlayerNames(snapshot.UserObjects, snapshot.World)
+
 	// Draw UI overlay
 	c.drawUI()
 
@@ -265,4 +268,42 @@ func (c *Client) drawShutdownScreen(centerX, centerY int) {
 	hint := "Press Q to disconnect now"
 	draw.MoveCursor(c.writer, centerX-len(hint)/2, centerY+4)
 	fmt.Fprint(c.writer, hint)
+}
+
+// drawPlayerNames draws usernames above other players' ships.
+func (c *Client) drawPlayerNames(userObjects []*object.User, world object.Screen) {
+	termWidth := c.canvas.TerminalWidth()
+	termHeight := c.canvas.TerminalHeight()
+
+	for _, user := range userObjects {
+		if user == c.state.Player || user.Username == "" {
+			continue
+		}
+
+		// Get screen positions (handles world wrapping)
+		positions := object.WorldToScreen(user.X, user.Y, c.state.Camera, c.state.View, world)
+		for i := 0; i < positions.Count; i++ {
+			pos := positions.Positions[i]
+
+			// Convert logical position to terminal coordinates, offset above the ship
+			col, row := c.canvas.LogicalToTerminal(pos.X, pos.Y-user.Size-2)
+
+			// Center the username horizontally
+			col -= len(user.Username) / 2
+
+			// Clamp to screen bounds
+			if row < 1 || row > termHeight {
+				continue
+			}
+			if col < 1 {
+				col = 1
+			}
+			if col+len(user.Username) > termWidth {
+				continue
+			}
+
+			draw.MoveCursor(c.writer, col, row)
+			fmt.Fprint(c.writer, user.Username)
+		}
+	}
 }

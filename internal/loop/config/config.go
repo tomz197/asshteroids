@@ -29,6 +29,7 @@ const (
 	InitialLives         = 3
 	InvincibilitySeconds = 3.0
 	PlayerBlinkFrequency = 10.0 // Hz
+	MaxUsernameLength    = 16   // Maximum display length for player usernames
 )
 
 // Spawning

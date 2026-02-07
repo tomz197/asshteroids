@@ -16,7 +16,7 @@ import (
 // Decouples the Client from the concrete Server implementation, enabling
 // testing and potential network-based server implementations.
 type GameServer interface {
-	RegisterClient() *ClientHandle
+	RegisterClient(username string) *ClientHandle
 	UnregisterClient(clientID int)
 	SendInput(clientID int, input object.Input)
 	GetSnapshot() *WorldSnapshot
@@ -53,6 +53,7 @@ var _ GameServer = (*Server)(nil)
 // ClientHandle represents a client's connection to the server.
 type ClientHandle struct {
 	ID             int
+	Username       string // Display name for this client
 	Player         *object.User
 	Input          object.Input
 	EventsCh       chan ClientEvent // Events sent to client (death, etc.)
@@ -184,8 +185,8 @@ func (s *Server) Shutdown(timeout time.Duration) {
 	}
 }
 
-// RegisterClient registers a new client and returns its handle.
-func (s *Server) RegisterClient() *ClientHandle {
+// RegisterClient registers a new client with the given username and returns its handle.
+func (s *Server) RegisterClient(username string) *ClientHandle {
 	s.mu.Lock()
 	id := s.nextClientID
 	s.nextClientID++
@@ -193,6 +194,7 @@ func (s *Server) RegisterClient() *ClientHandle {
 
 	handle := &ClientHandle{
 		ID:       id,
+		Username: username,
 		EventsCh: make(chan ClientEvent, 16),
 	}
 
@@ -249,6 +251,7 @@ func (s *Server) SpawnPlayer(clientID int) {
 	y := rand.Float64() * float64(config.WorldHeight)
 	player := object.NewUser(x, y)
 	player.OwnerID = clientID
+	player.Username = handle.Username
 	handle.Player = player
 	handle.InvincibleTime = config.InvincibilitySeconds // Grant spawn invincibility
 	s.world.AddObject(player)
@@ -516,10 +519,11 @@ func (s *Server) createSnapshot() {
 	copy(buf, s.world.Objects)
 
 	snapshot := &WorldSnapshot{
-		Objects: buf,
-		Players: len(s.clients),
-		World:   s.world.World,
-		Delta:   s.world.Delta,
+		Objects:     buf,
+		UserObjects: object.FilterUsers(buf),
+		Players:     len(s.clients),
+		World:       s.world.World,
+		Delta:       s.world.Delta,
 	}
 
 	s.snapshot.Store(snapshot)

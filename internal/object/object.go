@@ -142,6 +142,17 @@ func ReleaseObject(obj Object) {
 	}
 }
 
+// FilterUsers returns all User objects from the given object slice.
+func FilterUsers(objects []Object) []*User {
+	var users []*User
+	for _, obj := range objects {
+		if user, ok := obj.(*User); ok {
+			users = append(users, user)
+		}
+	}
+	return users
+}
+
 // ShouldRenderBlink returns true if an object with remaining protection/invincibility
 // time should be rendered this frame (for blinking effect).
 // Returns true always if remainingTime <= 0 (no protection).

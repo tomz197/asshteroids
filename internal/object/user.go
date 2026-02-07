@@ -23,7 +23,8 @@ type User struct {
 	fireCooldown float64 // Time until next shot allowed
 
 	// Ownership
-	OwnerID int // Client ID that owns this ship (for projectile attribution)
+	OwnerID  int    // Client ID that owns this ship (for projectile attribution)
+	Username string // Display name shown above the ship
 }
 
 // NewUser creates a new spaceship at the given position.
@@ -154,4 +155,3 @@ func (u *User) GetPosition() (float64, float64) {
 func (u *User) GetRadius() float64 {
 	return u.Size * 0.6 // Slightly smaller than visual size for fairness
 }
-

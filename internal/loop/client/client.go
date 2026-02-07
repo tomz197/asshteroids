@@ -22,12 +22,14 @@ type Client struct {
 	writer       io.Writer
 	inputStream  *input.Stream
 	lastInput    time.Time
+	username     string
 	termSizeFunc draw.TermSizeFunc
 }
 
 // ClientOptions configures the client.
 type ClientOptions struct {
 	TermSizeFunc draw.TermSizeFunc
+	Username     string
 }
 
 // NewClient creates a new client connected to the given server.
@@ -37,7 +39,7 @@ func NewClient(gs server.GameServer, r *bufio.Reader, w io.Writer, opts ClientOp
 		termSizeFunc = draw.DefaultTermSizeFunc
 	}
 
-	handle := gs.RegisterClient()
+	handle := gs.RegisterClient(opts.Username)
 	state := NewClientState()
 	state.termSizeFunc = termSizeFunc
 
@@ -68,6 +70,7 @@ func NewClient(gs server.GameServer, r *bufio.Reader, w io.Writer, opts ClientOp
 		writer:       w,
 		lastInput:    time.Now(),
 		inputStream:  input.StartStream(r),
+		username:     opts.Username,
 		termSizeFunc: termSizeFunc,
 	}
 }

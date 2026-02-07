@@ -9,9 +9,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
@@ -27,6 +29,7 @@ const (
 	defaultHost        = "::"
 	defaultPort        = "2222"
 	defaultHostKeyPath = "/app/keys/host_key"
+	maxUsernameLength  = 16
 )
 
 // Global game server - shared by all SSH clients
@@ -138,6 +141,7 @@ func gameMiddleware(next ssh.Handler) ssh.Handler {
 		reader := bufio.NewReader(sess)
 		clientOpts := client.ClientOptions{
 			TermSizeFunc: sizeTracker.getSize,
+			Username:     sanitizeUsername(sess.User()),
 		}
 
 		// Create a new client connected to the shared game server
@@ -177,3 +181,22 @@ func (s *sizeTracker) getSize() (int, int, error) {
 
 // Ensure sizeTracker.getSize satisfies draw.TermSizeFunc
 var _ draw.TermSizeFunc = (*sizeTracker)(nil).getSize
+
+// sanitizeUsername strips control characters and escape sequences from a username
+// to prevent terminal injection attacks, then caps it to maxUsernameLength runes.
+func sanitizeUsername(raw string) string {
+	var b strings.Builder
+	b.Grow(len(raw))
+	count := 0
+	for _, r := range raw {
+		if !unicode.IsGraphic(r) {
+			continue
+		}
+		if count >= maxUsernameLength {
+			break
+		}
+		b.WriteRune(r)
+		count++
+	}
+	return strings.TrimSpace(b.String())
+}
