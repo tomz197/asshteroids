@@ -37,6 +37,10 @@ var (
 )
 
 func main() {
+	if err := config.LoadEnvFile(".env"); err != nil {
+		log.Printf("Warning: failed to load .env file: %v", err)
+	}
+
 	host := config.GetEnv("SSH_HOST", defaultHost)
 	port := config.GetEnv("SSH_PORT", defaultPort)
 	hostKeyPath := config.GetEnv("SSH_HOST_KEY", defaultHostKeyPath)

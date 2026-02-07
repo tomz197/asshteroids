@@ -19,6 +19,10 @@ const (
 var htmlPage string
 
 func main() {
+	if err := config.LoadEnvFile(".env"); err != nil {
+		log.Printf("Warning: failed to load .env file: %v", err)
+	}
+
 	host := config.GetEnv("WEB_HOST", defaultHost)
 	port := config.GetEnv("WEB_PORT", defaultPort)
 	sshHost := config.GetEnv("SSH_DISPLAY_HOST", "your-server.com")

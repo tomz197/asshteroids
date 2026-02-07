@@ -224,7 +224,7 @@ func (c *Canvas) fillPolygon(points []Point) {
 
 // maxChunkSize is the maximum bytes to write at once for optimal network flow.
 // 1500 bytes matches typical MTU size for smooth SSH/network transmission.
-const maxChunkSize = 1450
+const maxChunkSize = 1400
 
 // Render outputs the canvas to the writer using half-block characters.
 func (c *Canvas) Render(w io.Writer) {
