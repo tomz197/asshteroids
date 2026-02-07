@@ -190,9 +190,10 @@ func (c *Client) updateScreen() {
 	}
 	renderWidth, renderHeight, offsetCol, offsetRow := clampTermSize(termWidth, termHeight)
 
-	// Full clear on resize so old border/offset content doesn't persist
-	if renderWidth != c.canvas.TerminalWidth() || renderHeight != c.canvas.TerminalHeight() {
+	if renderWidth != c.canvas.TerminalWidth() || renderHeight != c.canvas.TerminalHeight() ||
+		offsetCol != c.canvas.OffsetCol() || offsetRow != c.canvas.OffsetRow() {
 		draw.ClearScreen(c.writer)
+		c.canvas.ForceRedraw()
 	}
 
 	c.canvas.Resize(renderWidth, renderHeight)
