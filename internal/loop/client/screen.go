@@ -65,14 +65,17 @@ func (c *Client) drawUI() {
 	centerX := termWidth / 2
 	centerY := termHeight / 2
 
+	if c.state.GameState == GameStateShutdown {
+		c.drawShutdownScreen(centerX, centerY)
+		return
+	}
+
 	if c.state.isInactive {
 		c.drawInactivityScreen(centerX, centerY)
 		return
 	}
 
 	switch c.state.GameState {
-	case GameStateShutdown:
-		c.drawShutdownScreen(centerX, centerY)
 	case GameStatePlaying:
 		c.drawPlayingHUD(termWidth, termHeight)
 	case GameStateStart:
@@ -304,10 +307,7 @@ func (c *Client) drawPlayerNames(userObjects []*object.User, world object.Screen
 			if row < 1 || row > termHeight {
 				continue
 			}
-			if col < 1 {
-				col = 1
-			}
-			if col+len(user.Username) > termWidth {
+			if col < 1 || col+len(user.Username) > termWidth {
 				continue
 			}
 
