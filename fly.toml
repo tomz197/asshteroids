@@ -43,6 +43,6 @@ primary_region = 'fra'
   destination = "/app/keys"
 
 [[vm]]
-  memory = "2gb"
+  memory = "256mb"
   cpu_kind = "shared"
-  cpus = 8
+  cpus = 1
