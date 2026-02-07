@@ -1,10 +1,10 @@
 package draw
 
 import (
-	"fmt"
 	"io"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -29,6 +29,7 @@ type Canvas struct {
 
 	// Reusable buffers to reduce allocations
 	renderBuf       strings.Builder // Buffer for batching render output
+	numBuf          [20]byte        // Scratch buffer for integer-to-string conversion
 	scaledBuf       []Point         // Reusable buffer for fillPolygon scaled points
 	intersectionBuf []float64       // Reusable buffer for scanline intersections
 	polygonBuf      []Point         // Reusable buffer for polygon point generation
@@ -276,7 +277,13 @@ func (c *Canvas) Render(w io.Writer) {
 				continue // Skip empty cells
 			}
 
-			fmt.Fprintf(&c.renderBuf, "\033[%d;%dH%c", row+1+c.offsetRow, col+1+c.offsetCol, ch)
+			// Manual ANSI cursor positioning: \033[row;colH
+			c.renderBuf.WriteString("\033[")
+			c.renderBuf.Write(strconv.AppendInt(c.numBuf[:0], int64(row+1+c.offsetRow), 10))
+			c.renderBuf.WriteByte(';')
+			c.renderBuf.Write(strconv.AppendInt(c.numBuf[:0], int64(col+1+c.offsetCol), 10))
+			c.renderBuf.WriteByte('H')
+			c.renderBuf.WriteRune(ch)
 		}
 	}
 
@@ -309,23 +316,33 @@ func (c *Canvas) RenderBorder(w io.Writer) {
 	var buf strings.Builder
 	buf.Grow((c.termWidth+2)*2 + c.termHeight*2*12) // Estimate buffer size
 
+	hLine := strings.Repeat("─", c.termWidth)
+
 	if hasV {
 		// Top border
 		if hasH {
 			// Full top: ┌───┐
-			fmt.Fprintf(&buf, "\033[%d;%dH┌%s┐", top, left, strings.Repeat("─", c.termWidth))
+			c.writeCSI(&buf, top, left)
+			buf.WriteString("┌")
+			buf.WriteString(hLine)
+			buf.WriteString("┐")
 		} else {
 			// Top without corners: ───
-			fmt.Fprintf(&buf, "\033[%d;%dH%s", top, c.offsetCol+1, strings.Repeat("─", c.termWidth))
+			c.writeCSI(&buf, top, c.offsetCol+1)
+			buf.WriteString(hLine)
 		}
 
 		// Bottom border
 		if hasH {
 			// Full bottom: └───┘
-			fmt.Fprintf(&buf, "\033[%d;%dH└%s┘", bottom, left, strings.Repeat("─", c.termWidth))
+			c.writeCSI(&buf, bottom, left)
+			buf.WriteString("└")
+			buf.WriteString(hLine)
+			buf.WriteString("┘")
 		} else {
 			// Bottom without corners: ───
-			fmt.Fprintf(&buf, "\033[%d;%dH%s", bottom, c.offsetCol+1, strings.Repeat("─", c.termWidth))
+			c.writeCSI(&buf, bottom, c.offsetCol+1)
+			buf.WriteString(hLine)
 		}
 	}
 
@@ -339,7 +356,10 @@ func (c *Canvas) RenderBorder(w io.Writer) {
 			endRow = c.offsetRow + c.termHeight + 1
 		}
 		for row := startRow; row < endRow; row++ {
-			fmt.Fprintf(&buf, "\033[%d;%dH│\033[%d;%dH│", row, left, row, right)
+			c.writeCSI(&buf, row, left)
+			buf.WriteString("│")
+			c.writeCSI(&buf, row, right)
+			buf.WriteString("│")
 		}
 	}
 
@@ -372,6 +392,16 @@ func (c *Canvas) LogicalToTerminal(x, y float64) (col, row int) {
 	px := int(math.Round(x * c.scaleX))
 	py := int(math.Round(y * c.scaleY))
 	return px + 1, py/2 + 1
+}
+
+// writeCSI writes an ANSI CSI cursor position sequence (\033[row;colH) to the builder.
+// Uses the canvas numBuf to avoid allocations.
+func (c *Canvas) writeCSI(buf *strings.Builder, row, col int) {
+	buf.WriteString("\033[")
+	buf.Write(strconv.AppendInt(c.numBuf[:0], int64(row), 10))
+	buf.WriteByte(';')
+	buf.Write(strconv.AppendInt(c.numBuf[:0], int64(col), 10))
+	buf.WriteByte('H')
 }
 
 // BorrowPoints returns a reusable slice of Points with the given length.

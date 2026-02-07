@@ -24,13 +24,14 @@ func (s *AsteroidSpawner) Update(ctx UpdateContext) (bool, error) {
 		return false, nil
 	}
 
-	count := s.countActiveAsteroids(ctx)
+	// Use the incrementally maintained asteroid count from the server.
+	count := ctx.AsteroidCount
 	if count >= s.target {
 		return false, nil
 	}
 
-	// Spawn large asteroids in batches when significantly below target
-	// Each large asteroid counts as 4 (can split into 2 medium -> 4 small)
+	// Spawn large asteroids in batches when significantly below target.
+	// Each large asteroid counts as 4 (can split into 2 medium -> 4 small).
 	const largeAsteroidValue = 4
 	const batchThreshold = 12
 
@@ -45,21 +46,4 @@ func (s *AsteroidSpawner) Update(ctx UpdateContext) (bool, error) {
 // Draw is a no-op; spawner is not visible.
 func (s *AsteroidSpawner) Draw(_ DrawContext) error {
 	return nil
-}
-
-func (s *AsteroidSpawner) countActiveAsteroids(ctx UpdateContext) int {
-	total := 0
-	for _, obj := range ctx.Objects {
-		if asteroid, ok := obj.(*Asteroid); ok && !asteroid.Destroyed {
-			switch asteroid.Size {
-			case AsteroidLarge:
-				total += 4
-			case AsteroidMedium:
-				total += 2
-			case AsteroidSmall:
-				total += 1
-			}
-		}
-	}
-	return total
 }

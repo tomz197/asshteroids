@@ -19,11 +19,12 @@ type Input = input.Input
 
 // UpdateContext provides all the information an object needs during update.
 type UpdateContext struct {
-	Delta   time.Duration
-	Input   Input
-	Screen  Screen
-	Spawner Spawner
-	Objects []Object
+	Delta         time.Duration
+	Input         Input
+	Screen        Screen
+	Spawner       Spawner
+	Objects       []Object
+	AsteroidCount int // Weighted asteroid count (large=4, medium=2, small=1)
 }
 
 // Camera represents the viewport position in world space.

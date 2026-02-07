@@ -54,13 +54,8 @@ func (u *User) Update(ctx UpdateContext) (bool, error) {
 		u.Angle += u.RotationSpeed * dt
 	}
 
-	// Normalize angle to [-π, π]
-	for u.Angle > math.Pi {
-		u.Angle -= 2 * math.Pi
-	}
-	for u.Angle < -math.Pi {
-		u.Angle += 2 * math.Pi
-	}
+	// Normalize angle to [-π, π] in O(1)
+	u.Angle = math.Remainder(u.Angle, 2*math.Pi)
 
 	// Thrust (accelerate in facing direction)
 	if ctx.Input.Up || ctx.Input.UpLeft || ctx.Input.UpRight {

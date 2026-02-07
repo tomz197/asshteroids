@@ -6,6 +6,7 @@ import (
 
 	"github.com/tomz197/asteroids/internal/draw"
 	"github.com/tomz197/asteroids/internal/loop/config"
+	"github.com/tomz197/asteroids/internal/loop/server"
 	"github.com/tomz197/asteroids/internal/object"
 )
 
@@ -53,13 +54,13 @@ func (c *Client) drawFrame() error {
 	c.drawPlayerNames(snapshot.UserObjects, snapshot.World)
 
 	// Draw UI overlay
-	c.drawUI()
+	c.drawUI(snapshot)
 
 	return nil
 }
 
 // drawUI draws the game UI overlay.
-func (c *Client) drawUI() {
+func (c *Client) drawUI(snapshot *server.WorldSnapshot) {
 	termWidth := c.canvas.TerminalWidth()
 	termHeight := c.canvas.TerminalHeight()
 	centerX := termWidth / 2
@@ -77,7 +78,7 @@ func (c *Client) drawUI() {
 
 	switch c.state.GameState {
 	case GameStatePlaying:
-		c.drawPlayingHUD(termWidth, termHeight)
+		c.drawPlayingHUD(termWidth, termHeight, snapshot)
 	case GameStateStart:
 		c.drawStartScreen(centerX, centerY)
 	case GameStateDead:
@@ -171,8 +172,7 @@ func (c *Client) drawStartScreen(centerX, centerY int) {
 }
 
 // drawPlayingHUD draws the in-game HUD.
-func (c *Client) drawPlayingHUD(termWidth, termHeight int) {
-	snapshot := c.server.GetSnapshot()
+func (c *Client) drawPlayingHUD(termWidth, termHeight int, snapshot *server.WorldSnapshot) {
 	// Score display (top left)
 	scoreText := fmt.Sprintf("Score: %d", c.state.Score)
 	c.moveCursor(2, 1)

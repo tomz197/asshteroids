@@ -273,6 +273,7 @@ func (s *Server) RemovePlayer(clientID int) {
 
 // removeObjectLocked removes a single object from the world. Must be called with lock held.
 func (s *Server) removeObjectLocked(target object.Object) {
+	s.world.RemoveObject(target)
 	kept := s.world.Objects[:0]
 	for _, obj := range s.world.Objects {
 		if obj != target {
@@ -350,11 +351,12 @@ func (s *Server) updateWorld() {
 	for _, handle := range s.clients {
 		if handle.Player != nil {
 			ctx := object.UpdateContext{
-				Delta:   s.world.Delta,
-				Input:   handle.Input,
-				Screen:  s.world.Screen,
-				Spawner: s.world,
-				Objects: s.world.Objects,
+				Delta:         s.world.Delta,
+				Input:         handle.Input,
+				Screen:        s.world.Screen,
+				Spawner:       s.world,
+				Objects:       s.world.Objects,
+				AsteroidCount: s.world.AsteroidCount,
 			}
 			remove, _ := handle.Player.Update(ctx)
 			if remove {
@@ -366,11 +368,12 @@ func (s *Server) updateWorld() {
 	// Update non-player objects with empty input
 	emptyInput := object.Input{}
 	ctx := object.UpdateContext{
-		Delta:   s.world.Delta,
-		Input:   emptyInput,
-		Screen:  s.world.Screen,
-		Spawner: s.world,
-		Objects: s.world.Objects,
+		Delta:         s.world.Delta,
+		Input:         emptyInput,
+		Screen:        s.world.Screen,
+		Spawner:       s.world,
+		Objects:       s.world.Objects,
+		AsteroidCount: s.world.AsteroidCount,
 	}
 
 	kept := s.world.Objects[:0]
@@ -385,7 +388,8 @@ func (s *Server) updateWorld() {
 		if !remove {
 			kept = append(kept, obj)
 		} else {
-			// Release pooled objects back to their pool
+			// Decrement tracked counts and release pooled objects
+			s.world.RemoveObject(obj)
 			object.ReleaseObject(obj)
 		}
 	}
@@ -492,7 +496,9 @@ func (s *Server) checkCollisions() {
 	if len(s.toRemove) > 0 {
 		kept := s.world.Objects[:0]
 		for _, obj := range s.world.Objects {
-			if _, remove := s.toRemove[obj]; !remove {
+			if _, remove := s.toRemove[obj]; remove {
+				s.world.RemoveObject(obj)
+			} else {
 				kept = append(kept, obj)
 			}
 		}

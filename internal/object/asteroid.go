@@ -29,6 +29,10 @@ var asteroidSpeeds = map[AsteroidSize]float64{
 	AsteroidLarge:  6.0,
 }
 
+// maxAsteroidVertices is the maximum number of vertices an asteroid polygon can have.
+// Asteroids generate 8-12 vertices, so 12 covers the upper bound.
+const maxAsteroidVertices = 12
+
 // Asteroid is a destructible space rock.
 type Asteroid struct {
 	X, Y            float64      // Position (center)
@@ -37,9 +41,13 @@ type Asteroid struct {
 	RotationSpeed   float64      // Rotation speed (radians/sec)
 	Size            AsteroidSize // Size category
 	Radius          float64      // Collision/draw radius
-	Vertices        []float64    // Vertex distances from center (for irregular shape)
 	Destroyed       bool         // Mark for removal and splitting
 	SpawnProtection float64      // Seconds of invulnerability remaining after spawn
+
+	// Fixed-size vertex array avoids heap allocation for each asteroid.
+	// NumVertices holds how many entries of Vertices are in use.
+	Vertices    [maxAsteroidVertices]float64 // Vertex distances from center (for irregular shape)
+	NumVertices int                          // Number of active vertices (8-12)
 }
 
 // NewAsteroid creates an asteroid at position (x,y) with the given size.
@@ -58,7 +66,7 @@ func NewAsteroid(x, y float64, size AsteroidSize, angle float64) *Asteroid {
 
 	// Generate irregular polygon vertices (8-12 vertices)
 	numVerts := 8 + rand.Intn(5)
-	vertices := make([]float64, numVerts)
+	var vertices [maxAsteroidVertices]float64
 	for i := 0; i < numVerts; i++ {
 		// Vary radius by ±30% for irregular shape
 		vertices[i] = radius * (0.7 + rand.Float64()*0.6)
@@ -74,6 +82,7 @@ func NewAsteroid(x, y float64, size AsteroidSize, angle float64) *Asteroid {
 		Size:          size,
 		Radius:        radius,
 		Vertices:      vertices,
+		NumVertices:   numVerts,
 	}
 }
 
@@ -195,15 +204,17 @@ func (a *Asteroid) Draw(ctx DrawContext) error {
 
 // drawAt draws the asteroid at a specific screen position.
 func (a *Asteroid) drawAt(ctx DrawContext, screenX, screenY float64) {
-	numVerts := len(a.Vertices)
+	numVerts := a.NumVertices
 
 	// Use reusable buffer from canvas to avoid per-frame allocations.
 	// Safe for concurrent rendering because each client has its own Canvas.
 	points := ctx.Canvas.BorrowPoints(numVerts)
 
-	for i, dist := range a.Vertices {
+	angleStep := 2 * math.Pi / float64(numVerts)
+	for i := 0; i < numVerts; i++ {
 		// Angle for this vertex
-		vertAngle := a.Angle + float64(i)*2*math.Pi/float64(numVerts)
+		vertAngle := a.Angle + float64(i)*angleStep
+		dist := a.Vertices[i]
 		points[i] = draw.Point{
 			X: screenX + math.Cos(vertAngle)*dist,
 			Y: screenY + math.Sin(vertAngle)*dist,
