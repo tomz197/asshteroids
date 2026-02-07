@@ -48,6 +48,13 @@ const (
 	InactivityDisconnectUser = 120 // Seconds
 )
 
+// Maximum terminal render resolution.
+// If the user's terminal is larger, the render area is centered with a border.
+const (
+	MaxTermWidth  = 230 // Maximum terminal columns for rendering
+	MaxTermHeight = 65  // Maximum terminal rows for rendering
+)
+
 // Client rendering
 const (
 	ClientTargetFPS       = 60

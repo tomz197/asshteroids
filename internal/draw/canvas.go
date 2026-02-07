@@ -22,6 +22,11 @@ type Canvas struct {
 	scaleX        float64 // termWidth / logicalWidth
 	scaleY        float64 // (termHeight*2) / logicalHeight
 
+	// Offset for centering the render area when terminal is larger than max resolution.
+	// These are 0-based terminal offsets (columns/rows to skip).
+	offsetCol int
+	offsetRow int
+
 	// Reusable buffers to reduce allocations
 	renderBuf       strings.Builder // Buffer for batching render output
 	scaledBuf       []Point         // Reusable buffer for fillPolygon scaled points
@@ -68,6 +73,23 @@ func (c *Canvas) Resize(termWidth, termHeight int) {
 	// Update scale factors
 	c.scaleX = float64(termWidth) / c.logicalWidth
 	c.scaleY = float64(subPixelHeight) / c.logicalHeight
+}
+
+// SetOffset sets the column and row offset for centering the canvas.
+// Offsets are 0-based terminal positions: the canvas starts at (offsetCol+1, offsetRow+1).
+func (c *Canvas) SetOffset(col, row int) {
+	c.offsetCol = col
+	c.offsetRow = row
+}
+
+// OffsetCol returns the column offset used for centering.
+func (c *Canvas) OffsetCol() int {
+	return c.offsetCol
+}
+
+// OffsetRow returns the row offset used for centering.
+func (c *Canvas) OffsetRow() int {
+	return c.offsetRow
 }
 
 // Clear resets all pixels in the canvas.
@@ -254,7 +276,7 @@ func (c *Canvas) Render(w io.Writer) {
 				continue // Skip empty cells
 			}
 
-			fmt.Fprintf(&c.renderBuf, "\033[%d;%dH%c", row+1, col+1, ch)
+			fmt.Fprintf(&c.renderBuf, "\033[%d;%dH%c", row+1+c.offsetRow, col+1+c.offsetCol, ch)
 		}
 	}
 
@@ -268,6 +290,60 @@ func (c *Canvas) Render(w io.Writer) {
 		io.WriteString(w, chunk)
 		data = data[len(chunk):]
 	}
+}
+
+// RenderBorder draws a box border around the canvas area when the terminal
+// exceeds the max render resolution on either axis.
+// Draws horizontal borders when there is vertical offset, vertical borders
+// when there is horizontal offset, and corners when both are present.
+func (c *Canvas) RenderBorder(w io.Writer) {
+	hasH := c.offsetCol >= 1 // Room for left/right vertical bars
+	hasV := c.offsetRow >= 1 // Room for top/bottom horizontal bars
+
+	// Border positions (1-based terminal coordinates)
+	left := c.offsetCol
+	right := c.offsetCol + c.termWidth + 1
+	top := c.offsetRow
+	bottom := c.offsetRow + c.termHeight + 1
+
+	var buf strings.Builder
+	buf.Grow((c.termWidth+2)*2 + c.termHeight*2*12) // Estimate buffer size
+
+	if hasV {
+		// Top border
+		if hasH {
+			// Full top: ┌───┐
+			fmt.Fprintf(&buf, "\033[%d;%dH┌%s┐", top, left, strings.Repeat("─", c.termWidth))
+		} else {
+			// Top without corners: ───
+			fmt.Fprintf(&buf, "\033[%d;%dH%s", top, c.offsetCol+1, strings.Repeat("─", c.termWidth))
+		}
+
+		// Bottom border
+		if hasH {
+			// Full bottom: └───┘
+			fmt.Fprintf(&buf, "\033[%d;%dH└%s┘", bottom, left, strings.Repeat("─", c.termWidth))
+		} else {
+			// Bottom without corners: ───
+			fmt.Fprintf(&buf, "\033[%d;%dH%s", bottom, c.offsetCol+1, strings.Repeat("─", c.termWidth))
+		}
+	}
+
+	if hasH {
+		// Side borders: │ ... │
+		startRow := top + 1
+		endRow := bottom
+		if !hasV {
+			// No horizontal borders, side bars span full canvas height
+			startRow = c.offsetRow + 1
+			endRow = c.offsetRow + c.termHeight + 1
+		}
+		for row := startRow; row < endRow; row++ {
+			fmt.Fprintf(&buf, "\033[%d;%dH│\033[%d;%dH│", row, left, row, right)
+		}
+	}
+
+	io.WriteString(w, buf.String())
 }
 
 // LogicalWidth returns the logical width (target resolution).

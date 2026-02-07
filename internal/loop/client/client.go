@@ -57,9 +57,11 @@ func NewClient(gs server.GameServer, r *bufio.Reader, w io.Writer, opts ClientOp
 		Y: float64(config.WorldHeight) / 2,
 	}
 
-	// Create canvas
+	// Create canvas with clamped dimensions for max render resolution
 	termWidth, termHeight, _ := draw.TerminalSizeRawWith(termSizeFunc)
-	canvas := draw.NewScaledCanvas(termWidth, termHeight, config.ViewWidth, config.ViewHeight)
+	renderWidth, renderHeight, offsetCol, offsetRow := clampTermSize(termWidth, termHeight)
+	canvas := draw.NewScaledCanvas(renderWidth, renderHeight, config.ViewWidth, config.ViewHeight)
+	canvas.SetOffset(offsetCol, offsetRow)
 
 	return &Client{
 		server:       gs,
@@ -178,13 +180,31 @@ func (c *Client) processServerEvents() {
 	}
 }
 
-// updateScreen handles terminal resize.
+// updateScreen handles terminal resize, clamping to max render resolution.
 func (c *Client) updateScreen() {
 	termWidth, termHeight, err := draw.TerminalSizeRawWith(c.termSizeFunc)
 	if err != nil {
 		return
 	}
-	c.canvas.Resize(termWidth, termHeight)
+	renderWidth, renderHeight, offsetCol, offsetRow := clampTermSize(termWidth, termHeight)
+	c.canvas.Resize(renderWidth, renderHeight)
+	c.canvas.SetOffset(offsetCol, offsetRow)
+}
+
+// clampTermSize clamps terminal dimensions to the max render resolution and computes
+// the centering offset for the render area.
+func clampTermSize(termWidth, termHeight int) (renderWidth, renderHeight, offsetCol, offsetRow int) {
+	renderWidth = termWidth
+	renderHeight = termHeight
+	if renderWidth > config.MaxTermWidth {
+		renderWidth = config.MaxTermWidth
+	}
+	if renderHeight > config.MaxTermHeight {
+		renderHeight = config.MaxTermHeight
+	}
+	offsetCol = (termWidth - renderWidth) / 2
+	offsetRow = (termHeight - renderHeight) / 2
+	return
 }
 
 // updateStartState handles the start screen.
