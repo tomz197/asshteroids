@@ -22,6 +22,24 @@ func collectCollidables(objects []object.Object, projectiles *[]*object.Projecti
 	}
 }
 
+// populateGrids clears and re-inserts all collidables into the spatial grids.
+func populateGrids(
+	asteroids []*object.Asteroid,
+	projectiles []*object.Projectile,
+	asteroidGrid *physics.SpatialGrid,
+	projectileGrid *physics.SpatialGrid,
+) {
+	asteroidGrid.Clear()
+	for i, a := range asteroids {
+		asteroidGrid.Insert(a.X, a.Y, i)
+	}
+
+	projectileGrid.Clear()
+	for i, p := range projectiles {
+		projectileGrid.Insert(p.X, p.Y, i)
+	}
+}
+
 // asteroidScore returns the score for destroying an asteroid of the given size.
 func asteroidScore(size object.AsteroidSize) int {
 	switch size {
@@ -36,44 +54,53 @@ func asteroidScore(size object.AsteroidSize) int {
 	}
 }
 
-// checkProjectileProjectileCollisions handles projectile-projectile collisions.
-func checkProjectileProjectileCollisions(projectiles []*object.Projectile) {
-	for i := 0; i < len(projectiles); i++ {
-		p1 := projectiles[i]
+// checkProjectileProjectileCollisions handles projectile-projectile collisions
+// using the spatial grid to limit checks to nearby projectiles.
+func checkProjectileProjectileCollisions(projectiles []*object.Projectile, grid *physics.SpatialGrid) {
+	for i, p1 := range projectiles {
 		if p1.IsDestroyed() {
 			continue
 		}
-		for j := i + 1; j < len(projectiles); j++ {
+		grid.QueryAround(p1.X, p1.Y, func(j int) bool {
+			if j <= i {
+				return false // Skip self and already-checked pairs
+			}
 			p2 := projectiles[j]
 			if p2.IsDestroyed() {
-				continue
+				return false
 			}
 			if physics.CirclesOverlap(p1.X, p1.Y, object.ProjectileRadius, p2.X, p2.Y, object.ProjectileRadius) {
 				p1.MarkDestroyed()
 				p2.MarkDestroyed()
+				return true // p1 is destroyed, stop checking
 			}
-		}
+			return false
+		})
 	}
 }
 
-// checkAsteroidAsteroidCollisions handles bouncing between asteroids.
-func checkAsteroidAsteroidCollisions(asteroids []*object.Asteroid) {
-	for i := 0; i < len(asteroids); i++ {
-		a1 := asteroids[i]
+// checkAsteroidAsteroidCollisions handles bouncing between asteroids
+// using the spatial grid to limit checks to nearby asteroids.
+func checkAsteroidAsteroidCollisions(asteroids []*object.Asteroid, grid *physics.SpatialGrid) {
+	for i, a1 := range asteroids {
 		if a1.IsDestroyed() {
 			continue
 		}
-		for j := i + 1; j < len(asteroids); j++ {
+		grid.QueryAround(a1.X, a1.Y, func(j int) bool {
+			if j <= i {
+				return false // Skip self and already-checked pairs
+			}
 			a2 := asteroids[j]
 			if a2.IsDestroyed() {
-				continue
+				return false
 			}
 			dist := physics.Distance(a1.X, a1.Y, a2.X, a2.Y)
 			minDist := a1.GetRadius() + a2.GetRadius()
 			if dist < minDist && dist > 0 {
 				bounceAsteroids(a1, a2, dist)
 			}
-		}
+			return false
+		})
 	}
 }
 

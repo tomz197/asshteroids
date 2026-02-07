@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/tomz197/asteroids/internal/object"
+	"github.com/tomz197/asteroids/internal/physics"
 )
 
 // WorldState holds shared game state (objects, world bounds, timing).
@@ -19,6 +20,10 @@ type WorldState struct {
 	// Reusable caches for collision detection (avoids allocations)
 	projectileCache []*object.Projectile
 	asteroidCache   []*object.Asteroid
+
+	// Spatial grids for broad-phase collision detection (reused each frame)
+	asteroidGrid   *physics.SpatialGrid
+	projectileGrid *physics.SpatialGrid
 }
 
 // WorldSnapshot is an immutable snapshot of the world state for rendering.
@@ -30,11 +35,24 @@ type WorldSnapshot struct {
 	Delta       time.Duration
 }
 
+// collisionGridCellSize is the cell size for the spatial hash grids.
+// Must be >= the largest collision distance (two large asteroids: 5.0 + 5.0 = 10.0).
+const collisionGridCellSize = 10.0
+
 // NewWorldState creates a new initialized world state.
 func NewWorldState() *WorldState {
 	return &WorldState{
 		Objects: []object.Object{},
 	}
+}
+
+// InitGrids creates the spatial grids for broad-phase collision detection.
+// Must be called after World dimensions are set.
+func (w *WorldState) InitGrids() {
+	worldW := float64(w.World.Width)
+	worldH := float64(w.World.Height)
+	w.asteroidGrid = physics.NewSpatialGrid(worldW, worldH, collisionGridCellSize)
+	w.projectileGrid = physics.NewSpatialGrid(worldW, worldH, collisionGridCellSize)
 }
 
 // asteroidWeight returns the weighted count for an asteroid by size.

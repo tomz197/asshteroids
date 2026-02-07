@@ -92,6 +92,7 @@ func NewServer() *Server {
 		CenterY: config.WorldHeight / 2,
 	}
 	world.Screen = world.World
+	world.InitGrids()
 
 	s := &Server{
 		world:        world,
@@ -400,24 +401,28 @@ func (s *Server) updateWorld() {
 	s.checkCollisions()
 }
 
-// checkCollisions detects and handles collisions.
+// checkCollisions detects and handles collisions using spatial grids
+// for broad-phase filtering. Only objects in the same or adjacent grid
+// cells are checked against each other, reducing O(n^2) to ~O(n).
 func (s *Server) checkCollisions() {
-	// Use cached slices from world state
+	// Extract collidables and populate spatial grids
 	collectCollidables(s.world.Objects, &s.world.projectileCache, &s.world.asteroidCache)
 	projectiles := s.world.projectileCache
 	asteroids := s.world.asteroidCache
+	populateGrids(asteroids, projectiles, s.world.asteroidGrid, s.world.projectileGrid)
 
 	// Clear removal set for this frame
 	clear(s.toRemove)
 
-	// Projectile-asteroid collisions
+	// Projectile-asteroid collisions: query asteroid grid for each projectile
 	for _, p := range projectiles {
 		if p.IsDestroyed() {
 			continue
 		}
-		for _, a := range asteroids {
+		s.world.asteroidGrid.QueryAround(p.X, p.Y, func(ai int) bool {
+			a := asteroids[ai]
 			if a.IsDestroyed() || a.IsProtected() {
-				continue
+				return false
 			}
 			if physics.PointInCircle(p.X, p.Y, a.X, a.Y, a.GetRadius()) {
 				p.MarkDestroyed()
@@ -430,15 +435,17 @@ func (s *Server) checkCollisions() {
 					default:
 					}
 				}
+				return true // Projectile destroyed, stop checking
 			}
-		}
+			return false
+		})
 	}
 
 	// Projectile-projectile collisions
-	checkProjectileProjectileCollisions(projectiles)
+	checkProjectileProjectileCollisions(projectiles, s.world.projectileGrid)
 
-	// Asteroid-asteroid collisions
-	checkAsteroidAsteroidCollisions(asteroids)
+	// Asteroid-asteroid collisions (bouncing)
+	checkAsteroidAsteroidCollisions(asteroids, s.world.asteroidGrid)
 
 	// Player collisions (skip invincible players)
 	for _, handle := range s.clients {
@@ -447,32 +454,37 @@ func (s *Server) checkCollisions() {
 		}
 		px, py := handle.Player.GetPosition()
 		pr := handle.Player.GetRadius()
+		ownerID := handle.ID
 
 		hit := false
 
-		// Check projectile hits (skip own projectiles)
-		for _, p := range projectiles {
-			if p.IsDestroyed() || p.OwnerID == handle.ID {
-				continue
+		// Check projectile hits via projectile grid (skip own projectiles)
+		s.world.projectileGrid.QueryAround(px, py, func(pi int) bool {
+			p := projectiles[pi]
+			if p.IsDestroyed() || p.OwnerID == ownerID {
+				return false
 			}
 			if physics.PointInCircle(p.X, p.Y, px, py, pr) {
 				p.MarkDestroyed()
 				hit = true
-				break
+				return true // Found a hit, stop checking
 			}
-		}
+			return false
+		})
 
-		// Check asteroid collisions
+		// Check asteroid collisions via asteroid grid
 		if !hit {
-			for _, a := range asteroids {
+			s.world.asteroidGrid.QueryAround(px, py, func(ai int) bool {
+				a := asteroids[ai]
 				if a.IsDestroyed() || a.IsProtected() {
-					continue
+					return false
 				}
 				if physics.CirclesOverlap(px, py, pr, a.X, a.Y, a.GetRadius()) {
 					hit = true
-					break
+					return true // Found a hit, stop checking
 				}
-			}
+				return false
+			})
 		}
 
 		if hit {
