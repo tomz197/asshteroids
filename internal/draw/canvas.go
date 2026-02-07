@@ -8,8 +8,20 @@ import (
 	"strings"
 )
 
+// cellState represents the visual state of a terminal cell for double-buffering.
+type cellState byte
+
+const (
+	cellEmpty cellState = iota // ' '
+	cellUpper                  // '▀'
+	cellLower                  // '▄'
+	cellFull                   // '█'
+)
+
 // Canvas is a drawing buffer with 2x vertical resolution using half-block characters.
 // Supports scaling from logical coordinates to actual terminal pixels.
+// Uses double-buffering to only write cells that changed between frames,
+// eliminating the need for full-screen clearing and reducing SSH bandwidth.
 type Canvas struct {
 	termWidth      int    // Actual terminal columns
 	termHeight     int    // Actual terminal rows
@@ -26,6 +38,11 @@ type Canvas struct {
 	// These are 0-based terminal offsets (columns/rows to skip).
 	offsetCol int
 	offsetRow int
+
+	// Double-buffering: track previous frame's cell states to render only diffs.
+	prevCells   []cellState // Previous frame's cell state per terminal cell
+	dirtyMask   []bool      // Cells dirtied by external draws (UI text, names)
+	forceRedraw bool        // Force all cells to be re-rendered next frame
 
 	// Reusable buffers to reduce allocations
 	renderBuf       strings.Builder // Buffer for batching render output
@@ -47,6 +64,7 @@ func NewCanvas(width, height int) *Canvas {
 // termWidth/Height are the actual terminal dimensions.
 func NewScaledCanvas(termWidth, termHeight int, logicalWidth, logicalHeight float64) *Canvas {
 	subPixelHeight := termHeight * 2
+	totalCells := termWidth * termHeight
 	return &Canvas{
 		termWidth:      termWidth,
 		termHeight:     termHeight,
@@ -56,16 +74,24 @@ func NewScaledCanvas(termWidth, termHeight int, logicalWidth, logicalHeight floa
 		logicalHeight:  logicalHeight,
 		scaleX:         float64(termWidth) / logicalWidth,
 		scaleY:         float64(subPixelHeight) / logicalHeight,
+		prevCells:      make([]cellState, totalCells),
+		dirtyMask:      make([]bool, totalCells),
+		forceRedraw:    true, // First frame must render everything
 	}
 }
 
 // Resize updates the canvas for new terminal dimensions while keeping logical size.
+// Forces a full redraw on the next Render call when the size actually changes.
 func (c *Canvas) Resize(termWidth, termHeight int) {
 	subPixelHeight := termHeight * 2
 
 	// Reallocate if size changed
 	if termWidth != c.termWidth || termHeight != c.termHeight {
+		totalCells := termWidth * termHeight
 		c.pixels = make([]bool, subPixelHeight*termWidth)
+		c.prevCells = make([]cellState, totalCells)
+		c.dirtyMask = make([]bool, totalCells)
+		c.forceRedraw = true
 		c.termWidth = termWidth
 		c.termHeight = termHeight
 		c.subPixelHeight = subPixelHeight
@@ -250,42 +276,71 @@ func (c *Canvas) fillPolygon(points []Point) {
 const maxChunkSize = 1400
 
 // Render outputs the canvas to the writer using half-block characters.
+// Uses double-buffering: only cells that changed since the previous frame
+// (or were externally dirtied via MarkTextDirty) are written. Empty cells
+// that were previously filled are overwritten with spaces, eliminating
+// the need for full-screen clearing and reducing SSH bandwidth.
 func (c *Canvas) Render(w io.Writer) {
-	// Reset and pre-grow buffer for better performance
 	c.renderBuf.Reset()
-	c.renderBuf.Grow(c.termWidth * c.termHeight * 12) // Estimate ~12 bytes per cell
+	c.renderBuf.Grow(c.termWidth * c.termHeight * 4) // Conservative estimate for diff output
+
+	force := c.forceRedraw
+	c.forceRedraw = false
 
 	for row := 0; row < c.termHeight; row++ {
 		topY := row * 2
 		bottomY := row*2 + 1
 		topOffset := topY * c.termWidth
 		bottomOffset := bottomY * c.termWidth
+		rowBase := row * c.termWidth
 
 		for col := 0; col < c.termWidth; col++ {
 			top := c.pixels[topOffset+col]
 			bottom := bottomY < c.subPixelHeight && c.pixels[bottomOffset+col]
 
-			var ch rune
+			var current cellState
 			switch {
 			case top && bottom:
-				ch = BlockFull
+				current = cellFull
 			case top:
-				ch = BlockUpperHalf
+				current = cellUpper
 			case bottom:
-				ch = BlockLowerHalf
+				current = cellLower
 			default:
-				continue // Skip empty cells
+				current = cellEmpty
 			}
 
-			// Manual ANSI cursor positioning: \033[row;colH
+			cellIdx := rowBase + col
+			prev := c.prevCells[cellIdx]
+			dirty := c.dirtyMask[cellIdx]
+			c.prevCells[cellIdx] = current
+
+			if !force && !dirty && current == prev {
+				continue // No change, skip this cell
+			}
+
+			// Write ANSI cursor position + character
 			c.renderBuf.WriteString("\033[")
 			c.renderBuf.Write(strconv.AppendInt(c.numBuf[:0], int64(row+1+c.offsetRow), 10))
 			c.renderBuf.WriteByte(';')
 			c.renderBuf.Write(strconv.AppendInt(c.numBuf[:0], int64(col+1+c.offsetCol), 10))
 			c.renderBuf.WriteByte('H')
-			c.renderBuf.WriteRune(ch)
+
+			switch current {
+			case cellFull:
+				c.renderBuf.WriteRune(BlockFull)
+			case cellUpper:
+				c.renderBuf.WriteRune(BlockUpperHalf)
+			case cellLower:
+				c.renderBuf.WriteRune(BlockLowerHalf)
+			case cellEmpty:
+				c.renderBuf.WriteByte(' ')
+			}
 		}
 	}
+
+	// Clear dirty mask for next frame
+	clear(c.dirtyMask)
 
 	// Write output in chunks for optimal network flow
 	data := c.renderBuf.String()
@@ -392,6 +447,32 @@ func (c *Canvas) LogicalToTerminal(x, y float64) (col, row int) {
 	px := int(math.Round(x * c.scaleX))
 	py := int(math.Round(y * c.scaleY))
 	return px + 1, py/2 + 1
+}
+
+// ForceRedraw marks the canvas so the next Render call writes every cell,
+// regardless of whether it changed. Use after a full terminal clear or resize.
+func (c *Canvas) ForceRedraw() {
+	c.forceRedraw = true
+}
+
+// MarkTextDirty marks terminal cells as externally modified (e.g. by UI text overlays).
+// col and row are 1-based coordinates within the canvas area (matching moveCursor).
+// width is the number of characters that were drawn.
+// The next Render call will overwrite these cells with the correct canvas content,
+// effectively cleaning up text drawn on top of the canvas.
+func (c *Canvas) MarkTextDirty(col, row, width int) {
+	r := row - 1 // Convert 1-based to 0-based
+	c0 := col - 1
+	if r < 0 || r >= c.termHeight {
+		return
+	}
+	base := r * c.termWidth
+	for i := 0; i < width; i++ {
+		ci := c0 + i
+		if ci >= 0 && ci < c.termWidth {
+			c.dirtyMask[base+ci] = true
+		}
+	}
 }
 
 // writeCSI writes an ANSI CSI cursor position sequence (\033[row;colH) to the builder.

@@ -181,12 +181,20 @@ func (c *Client) processServerEvents() {
 }
 
 // updateScreen handles terminal resize, clamping to max render resolution.
+// On actual size changes, clears the terminal to remove residual pixels
+// outside the new canvas area (e.g. old borders or offset content).
 func (c *Client) updateScreen() {
 	termWidth, termHeight, err := draw.TerminalSizeRawWith(c.termSizeFunc)
 	if err != nil {
 		return
 	}
 	renderWidth, renderHeight, offsetCol, offsetRow := clampTermSize(termWidth, termHeight)
+
+	// Full clear on resize so old border/offset content doesn't persist
+	if renderWidth != c.canvas.TerminalWidth() || renderHeight != c.canvas.TerminalHeight() {
+		draw.ClearScreen(c.writer)
+	}
+
 	c.canvas.Resize(renderWidth, renderHeight)
 	c.canvas.SetOffset(offsetCol, offsetRow)
 }

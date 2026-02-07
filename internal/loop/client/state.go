@@ -25,6 +25,7 @@ type ClientState struct {
 	View           object.Screen     // Viewport dimensions (can vary per client)
 	Camera         object.Camera     // Camera position (follows this client's player)
 	GameState      GameState         // This client's game phase
+	prevGameState  GameState         // Previous frame's game state (for transition detection)
 	Player         *object.User      // Reference to this client's ship (from server)
 	Score          int               // This client's score
 	Lives          int               // This client's remaining lives
@@ -34,6 +35,7 @@ type ClientState struct {
 	delta          time.Duration     // Frame delta time (client-side)
 	shutdownTimer  float64           // Countdown before auto-disconnect on shutdown
 	isInactive     bool              // Whether the client is in inactive warning state
+	wasInactive    bool              // Previous frame's inactivity state (for transition detection)
 }
 
 // NewClientState creates a new initialized client state.

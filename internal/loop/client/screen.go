@@ -18,7 +18,17 @@ func (c *Client) moveCursor(x, y int) {
 
 // drawFrame draws the current frame.
 func (c *Client) drawFrame() error {
-	draw.ClearScreen(c.writer)
+	// On game state or inactivity transitions, do a full terminal clear
+	// so UI elements from the previous state don't persist on screen.
+	stateChanged := c.state.GameState != c.state.prevGameState
+	inactiveChanged := c.state.isInactive != c.state.wasInactive
+	if stateChanged || inactiveChanged {
+		draw.ClearScreen(c.writer)
+		c.canvas.ForceRedraw()
+		c.state.prevGameState = c.state.GameState
+		c.state.wasInactive = c.state.isInactive
+	}
+
 	c.canvas.Clear()
 
 	// Get world snapshot
@@ -172,26 +182,28 @@ func (c *Client) drawStartScreen(centerX, centerY int) {
 }
 
 // drawPlayingHUD draws the in-game HUD.
+// Text fields use fixed-width formatting so shrinking values don't leave
+// residual characters on screen (since we no longer clear every frame).
 func (c *Client) drawPlayingHUD(termWidth, termHeight int, snapshot *server.WorldSnapshot) {
-	// Score display (top left)
-	scoreText := fmt.Sprintf("Score: %d", c.state.Score)
+	// Score display (top left) — left-aligned, padded to 8 digits
+	scoreText := fmt.Sprintf("Score: %-8d", c.state.Score)
 	c.moveCursor(2, 1)
 	fmt.Fprint(c.writer, scoreText)
 
 	// Lives display (top right)
-	livesText := fmt.Sprintf("Lives: %d", c.state.Lives)
+	livesText := fmt.Sprintf("Lives: %-3d", c.state.Lives)
 	c.moveCursor(termWidth-len(livesText)-1, 1)
 	fmt.Fprint(c.writer, livesText)
 
 	// Live players (bottom right)
-	livePlayersText := fmt.Sprintf("Players: %d", snapshot.Players)
+	livePlayersText := fmt.Sprintf("Players: %-4d", snapshot.Players)
 	c.moveCursor(termWidth-len(livePlayersText)-1, termHeight)
 	fmt.Fprint(c.writer, livePlayersText)
 
 	// Coordinates display (bottom left)
 	if c.state.Player != nil {
 		px, py := c.state.Player.GetPosition()
-		coordText := fmt.Sprintf("X:%.0f Y:%.0f", px, py)
+		coordText := fmt.Sprintf("X:%-5.0f Y:%-5.0f", px, py)
 		c.moveCursor(2, termHeight)
 		fmt.Fprint(c.writer, coordText)
 	}
@@ -283,6 +295,8 @@ func (c *Client) drawShutdownScreen(centerX, centerY int) {
 }
 
 // drawPlayerNames draws usernames above other players' ships.
+// Marks the drawn cells as dirty so the canvas overwrites them next frame,
+// preventing stale name text from persisting when ships move.
 func (c *Client) drawPlayerNames(userObjects []*object.User, world object.Screen) {
 	termWidth := c.canvas.TerminalWidth()
 	termHeight := c.canvas.TerminalHeight()
@@ -313,6 +327,9 @@ func (c *Client) drawPlayerNames(userObjects []*object.User, world object.Screen
 
 			c.moveCursor(col, row)
 			fmt.Fprint(c.writer, user.Username)
+
+			// Mark these cells dirty so the canvas cleans them up next frame
+			c.canvas.MarkTextDirty(col, row, len(user.Username))
 		}
 	}
 }
