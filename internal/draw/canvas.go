@@ -78,11 +78,10 @@ type Canvas struct {
 	forceRedraw bool   // Force all cells to be re-rendered next frame
 
 	// Reusable buffers to reduce allocations
-	renderBuf       strings.Builder // Buffer for batching render output
-	numBuf          [20]byte        // Scratch buffer for integer-to-string conversion
-	scaledBuf       []Point         // Reusable buffer for fillPolygon scaled points
-	intersectionBuf []float64       // Reusable buffer for scanline intersections
-	polygonBuf      []Point         // Reusable buffer for polygon point generation
+	numBuf          [20]byte  // Scratch buffer for integer-to-string conversion
+	scaledBuf       []Point   // Reusable buffer for fillPolygon scaled points
+	intersectionBuf []float64 // Reusable buffer for scanline intersections
+	polygonBuf      []Point   // Reusable buffer for polygon point generation
 }
 
 // NewCanvas creates a canvas for the given terminal dimensions.
@@ -312,12 +311,6 @@ const maxChunkSize = 1400
 // that were previously filled are overwritten with spaces, eliminating
 // the need for full-screen clearing and reducing SSH bandwidth.
 func (c *Canvas) Render(cw *ChunkWriter) {
-	c.renderBuf.Reset()
-	minCap := c.termWidth * c.termHeight * 4
-	if c.renderBuf.Cap() < minCap {
-		c.renderBuf.Grow(minCap - c.renderBuf.Cap())
-	}
-
 	force := c.forceRedraw
 	c.forceRedraw = false
 
@@ -354,32 +347,26 @@ func (c *Canvas) Render(cw *ChunkWriter) {
 				continue // No change, skip this cell
 			}
 
-			// Write ANSI cursor position + character
-			c.renderBuf.WriteString("\033[")
-			c.renderBuf.Write(strconv.AppendInt(c.numBuf[:0], int64(row+1+c.offsetRow), 10))
-			c.renderBuf.WriteByte(';')
-			c.renderBuf.Write(strconv.AppendInt(c.numBuf[:0], int64(col+1+c.offsetCol), 10))
-			c.renderBuf.WriteByte('H')
+			// Write ANSI cursor position + character directly to ChunkWriter
+			cw.WriteString("\033[")
+			cw.Write(strconv.AppendInt(c.numBuf[:0], int64(row+1+c.offsetRow), 10))
+			cw.WriteByte(';')
+			cw.Write(strconv.AppendInt(c.numBuf[:0], int64(col+1+c.offsetCol), 10))
+			cw.WriteByte('H')
 
 			switch current {
 			case cellFull:
-				c.renderBuf.WriteRune(BlockFull)
+				cw.WriteRune(BlockFull)
 			case cellUpper:
-				c.renderBuf.WriteRune(BlockUpperHalf)
+				cw.WriteRune(BlockUpperHalf)
 			case cellLower:
-				c.renderBuf.WriteRune(BlockLowerHalf)
+				cw.WriteRune(BlockLowerHalf)
 			case cellEmpty:
-				c.renderBuf.WriteByte(' ')
+				cw.WriteByte(' ')
 			}
 		}
 	}
 
-	// Clear dirty bits for next frame (cells we skipped retain state but not dirty)
-	for i := range c.prevCells {
-		c.prevCells[i] &= cellStateMask
-	}
-
-	cw.WriteString(c.renderBuf.String())
 }
 
 // RenderBorder draws a box border around the canvas area when the terminal
@@ -396,36 +383,33 @@ func (c *Canvas) RenderBorder(cw *ChunkWriter) {
 	top := c.offsetRow
 	bottom := c.offsetRow + c.termHeight + 1
 
-	c.renderBuf.Reset()
-	c.renderBuf.Grow((c.termWidth+2)*2 + c.termHeight*2*12) // Estimate buffer size
-
 	hLine := strings.Repeat("─", c.termWidth)
 
 	if hasV {
 		// Top border
 		if hasH {
 			// Full top: ┌───┐
-			c.writeCSI(&c.renderBuf, top, left)
-			c.renderBuf.WriteString("┌")
-			c.renderBuf.WriteString(hLine)
-			c.renderBuf.WriteString("┐")
+			c.writeCSI(cw, top, left)
+			cw.WriteString("┌")
+			cw.WriteString(hLine)
+			cw.WriteString("┐")
 		} else {
 			// Top without corners: ───
-			c.writeCSI(&c.renderBuf, top, c.offsetCol+1)
-			c.renderBuf.WriteString(hLine)
+			c.writeCSI(cw, top, c.offsetCol+1)
+			cw.WriteString(hLine)
 		}
 
 		// Bottom border
 		if hasH {
 			// Full bottom: └───┘
-			c.writeCSI(&c.renderBuf, bottom, left)
-			c.renderBuf.WriteString("└")
-			c.renderBuf.WriteString(hLine)
-			c.renderBuf.WriteString("┘")
+			c.writeCSI(cw, bottom, left)
+			cw.WriteString("└")
+			cw.WriteString(hLine)
+			cw.WriteString("┘")
 		} else {
 			// Bottom without corners: ───
-			c.writeCSI(&c.renderBuf, bottom, c.offsetCol+1)
-			c.renderBuf.WriteString(hLine)
+			c.writeCSI(cw, bottom, c.offsetCol+1)
+			cw.WriteString(hLine)
 		}
 	}
 
@@ -439,14 +423,12 @@ func (c *Canvas) RenderBorder(cw *ChunkWriter) {
 			endRow = c.offsetRow + c.termHeight + 1
 		}
 		for row := startRow; row < endRow; row++ {
-			c.writeCSI(&c.renderBuf, row, left)
-			c.renderBuf.WriteString("│")
-			c.writeCSI(&c.renderBuf, row, right)
-			c.renderBuf.WriteString("│")
+			c.writeCSI(cw, row, left)
+			cw.WriteString("│")
+			c.writeCSI(cw, row, right)
+			cw.WriteString("│")
 		}
 	}
-
-	cw.WriteString(c.renderBuf.String())
 }
 
 // LogicalWidth returns the logical width (target resolution).
@@ -503,14 +485,14 @@ func (c *Canvas) MarkTextDirty(col, row, width int) {
 	}
 }
 
-// writeCSI writes an ANSI CSI cursor position sequence (\033[row;colH) to the builder.
+// writeCSI writes an ANSI CSI cursor position sequence (\033[row;colH) to the writer.
 // Uses the canvas numBuf to avoid allocations.
-func (c *Canvas) writeCSI(buf *strings.Builder, row, col int) {
-	buf.WriteString("\033[")
-	buf.Write(strconv.AppendInt(c.numBuf[:0], int64(row), 10))
-	buf.WriteByte(';')
-	buf.Write(strconv.AppendInt(c.numBuf[:0], int64(col), 10))
-	buf.WriteByte('H')
+func (c *Canvas) writeCSI(cw *ChunkWriter, row, col int) {
+	cw.WriteString("\033[")
+	cw.Write(strconv.AppendInt(c.numBuf[:0], int64(row), 10))
+	cw.WriteByte(';')
+	cw.Write(strconv.AppendInt(c.numBuf[:0], int64(col), 10))
+	cw.WriteByte('H')
 }
 
 // BorrowPoints returns a reusable slice of Points with the given length.

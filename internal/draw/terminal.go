@@ -64,6 +64,11 @@ func (cw *ChunkWriter) WriteAt(col, row int, s string) {
 	cw.buf.WriteString(s)
 }
 
+// WriteByte appends a byte to the buffer.
+func (cw *ChunkWriter) WriteByte(c byte) error {
+	return cw.buf.WriteByte(c)
+}
+
 // WriteRune appends a rune to the buffer.
 func (cw *ChunkWriter) WriteRune(r rune) {
 	cw.buf.WriteRune(r)
