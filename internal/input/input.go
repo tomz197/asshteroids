@@ -163,7 +163,7 @@ func ResetKeyInput(s *Stream) {
 // applyByteToState updates the key state timestamps based on the pressed byte.
 func applyByteToState(state *keyState, b byte, now time.Time) {
 	switch b {
-	case 'q', 'Q':
+	case 'q', 'Q', '\x03': // CTRL+C
 		state.quit = now
 	case 'a', 'A', 'j', 'J':
 		state.left = now
