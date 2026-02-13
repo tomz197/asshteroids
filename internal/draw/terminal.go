@@ -11,8 +11,8 @@ import (
 )
 
 // ChunkWriter accumulates text for terminal output and writes in chunks for optimal
-// network flow (e.g. over SSH). Use MoveCursor, Write, WriteRune to accumulate,
-// then Flush to write to the underlying writer.
+// network flow (e.g. over SSH). Use MoveCursor, WriteString, WriteRune to accumulate,
+// then Flush to write to the underlying writer. Implements io.Writer for Canvas.Render.
 type ChunkWriter struct {
 	buf    strings.Builder
 	w      io.Writer
@@ -42,14 +42,19 @@ func (cw *ChunkWriter) MoveCursor(col, row int) {
 	cw.buf.WriteByte('H')
 }
 
-// Write appends a string to the buffer.
-func (cw *ChunkWriter) Write(s string) {
+// Write implements io.Writer for use with Canvas.Render and other writers.
+func (cw *ChunkWriter) Write(p []byte) (n int, err error) {
+	return cw.buf.Write(p)
+}
+
+// WriteString appends a string to the buffer.
+func (cw *ChunkWriter) WriteString(s string) {
 	cw.buf.WriteString(s)
 }
 
 // WriteAt writes a string at a specific position. col and row are 1-based canvas coordinates; offset is applied automatically.
 func (cw *ChunkWriter) WriteAt(col, row int, s string) {
-	MoveCursor(cw.w, col+cw.offCol, row+cw.offRow)
+	cw.MoveCursor(col, row)
 	cw.buf.WriteString(s)
 }
 
@@ -57,6 +62,9 @@ func (cw *ChunkWriter) WriteAt(col, row int, s string) {
 func (cw *ChunkWriter) WriteRune(r rune) {
 	cw.buf.WriteRune(r)
 }
+
+// Ensure ChunkWriter satisfies io.Writer.
+var _ io.Writer = (*ChunkWriter)(nil)
 
 // Flush writes the accumulated buffer to the underlying writer in chunks,
 // then resets the buffer. Uses the same chunk size as Canvas.Render.

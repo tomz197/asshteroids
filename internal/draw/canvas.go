@@ -1,7 +1,6 @@
 package draw
 
 import (
-	"io"
 	"math"
 	"sort"
 	"strconv"
@@ -303,12 +302,12 @@ func (c *Canvas) fillPolygon(points []Point) {
 // 1500 bytes matches typical MTU size for smooth SSH/network transmission.
 const maxChunkSize = 1400
 
-// Render outputs the canvas to the writer using half-block characters.
+// Render outputs the canvas to the chunk writer using half-block characters.
 // Uses double-buffering: only cells that changed since the previous frame
 // (or were externally dirtied via MarkTextDirty) are written. Empty cells
 // that were previously filled are overwritten with spaces, eliminating
 // the need for full-screen clearing and reducing SSH bandwidth.
-func (c *Canvas) Render(w io.Writer) {
+func (c *Canvas) Render(cw *ChunkWriter) {
 	c.renderBuf.Reset()
 	c.renderBuf.Grow(c.termWidth * c.termHeight * 4) // Conservative estimate for diff output
 
@@ -370,23 +369,14 @@ func (c *Canvas) Render(w io.Writer) {
 	// Clear dirty mask for next frame
 	clear(c.dirtyMask)
 
-	// Write output in chunks for optimal network flow
-	data := c.renderBuf.String()
-	for len(data) > 0 {
-		chunk := data
-		if len(chunk) > maxChunkSize {
-			chunk = data[:maxChunkSize]
-		}
-		io.WriteString(w, chunk)
-		data = data[len(chunk):]
-	}
+	cw.WriteString(c.renderBuf.String())
 }
 
 // RenderBorder draws a box border around the canvas area when the terminal
 // exceeds the max render resolution on either axis.
 // Draws horizontal borders when there is vertical offset, vertical borders
 // when there is horizontal offset, and corners when both are present.
-func (c *Canvas) RenderBorder(w io.Writer) {
+func (c *Canvas) RenderBorder(cw *ChunkWriter) {
 	hasH := c.offsetCol >= 1 // Room for left/right vertical bars
 	hasV := c.offsetRow >= 1 // Room for top/bottom horizontal bars
 
@@ -396,8 +386,8 @@ func (c *Canvas) RenderBorder(w io.Writer) {
 	top := c.offsetRow
 	bottom := c.offsetRow + c.termHeight + 1
 
-	var buf strings.Builder
-	buf.Grow((c.termWidth+2)*2 + c.termHeight*2*12) // Estimate buffer size
+	c.renderBuf.Reset()
+	c.renderBuf.Grow((c.termWidth+2)*2 + c.termHeight*2*12) // Estimate buffer size
 
 	hLine := strings.Repeat("─", c.termWidth)
 
@@ -405,27 +395,27 @@ func (c *Canvas) RenderBorder(w io.Writer) {
 		// Top border
 		if hasH {
 			// Full top: ┌───┐
-			c.writeCSI(&buf, top, left)
-			buf.WriteString("┌")
-			buf.WriteString(hLine)
-			buf.WriteString("┐")
+			c.writeCSI(&c.renderBuf, top, left)
+			c.renderBuf.WriteString("┌")
+			c.renderBuf.WriteString(hLine)
+			c.renderBuf.WriteString("┐")
 		} else {
 			// Top without corners: ───
-			c.writeCSI(&buf, top, c.offsetCol+1)
-			buf.WriteString(hLine)
+			c.writeCSI(&c.renderBuf, top, c.offsetCol+1)
+			c.renderBuf.WriteString(hLine)
 		}
 
 		// Bottom border
 		if hasH {
 			// Full bottom: └───┘
-			c.writeCSI(&buf, bottom, left)
-			buf.WriteString("└")
-			buf.WriteString(hLine)
-			buf.WriteString("┘")
+			c.writeCSI(&c.renderBuf, bottom, left)
+			c.renderBuf.WriteString("└")
+			c.renderBuf.WriteString(hLine)
+			c.renderBuf.WriteString("┘")
 		} else {
 			// Bottom without corners: ───
-			c.writeCSI(&buf, bottom, c.offsetCol+1)
-			buf.WriteString(hLine)
+			c.writeCSI(&c.renderBuf, bottom, c.offsetCol+1)
+			c.renderBuf.WriteString(hLine)
 		}
 	}
 
@@ -439,14 +429,14 @@ func (c *Canvas) RenderBorder(w io.Writer) {
 			endRow = c.offsetRow + c.termHeight + 1
 		}
 		for row := startRow; row < endRow; row++ {
-			c.writeCSI(&buf, row, left)
-			buf.WriteString("│")
-			c.writeCSI(&buf, row, right)
-			buf.WriteString("│")
+			c.writeCSI(&c.renderBuf, row, left)
+			c.renderBuf.WriteString("│")
+			c.writeCSI(&c.renderBuf, row, right)
+			c.renderBuf.WriteString("│")
 		}
 	}
 
-	io.WriteString(w, buf.String())
+	cw.WriteString(c.renderBuf.String())
 }
 
 // LogicalWidth returns the logical width (target resolution).
