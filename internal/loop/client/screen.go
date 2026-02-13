@@ -362,6 +362,8 @@ func (c *Client) drawDeadScreen(centerX, centerY int) {
 		}
 		cw.WriteAt(centerX-len(prompt)/2, titleStartY+len(titleArt)+5, prompt)
 	}
+	escapeHint := "ESC to return to menu"
+	cw.WriteAt(centerX-len(escapeHint)/2, titleStartY+len(titleArt)+7, escapeHint)
 }
 
 // drawShutdownScreen draws the server shutdown notification screen.

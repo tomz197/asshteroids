@@ -250,6 +250,11 @@ func (c *Client) updatePlayingState() {
 
 // updateDeadState handles the death screen.
 func (c *Client) updateDeadState() {
+	if c.state.Input.Escape {
+		input.ResetKeyInput(c.inputStream)
+		c.state.GameState = GameStateStart
+		return
+	}
 	if c.state.RespawnTimeRemaining > 0 {
 		c.state.RespawnTimeRemaining -= c.state.delta.Seconds()
 		if c.state.RespawnTimeRemaining < 0 {
