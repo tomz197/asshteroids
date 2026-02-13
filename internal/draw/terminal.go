@@ -1,6 +1,7 @@
 package draw
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -15,7 +16,8 @@ import (
 // then Flush to write to the underlying writer. Implements io.Writer for Canvas.Render.
 type ChunkWriter struct {
 	buf    strings.Builder
-	w      io.Writer
+	bufw   *bufio.Writer // Buffers writes to underlying writer for fewer syscalls
+	numBuf [20]byte      // Scratch buffer for allocation-free integer formatting
 	offCol int
 	offRow int
 }
@@ -23,7 +25,11 @@ type ChunkWriter struct {
 // NewChunkWriter creates a ChunkWriter that writes to w. offsetCol and offsetRow
 // are added to all MoveCursor coordinates (for canvas centering).
 func NewChunkWriter(w io.Writer, offsetCol, offsetRow int) *ChunkWriter {
-	return &ChunkWriter{w: w, offCol: offsetCol, offRow: offsetRow}
+	return &ChunkWriter{
+		bufw:   bufio.NewWriterSize(w, 8192),
+		offCol: offsetCol,
+		offRow: offsetRow,
+	}
 }
 
 // SetOffset updates the cursor offset (e.g. after terminal resize).
@@ -36,9 +42,9 @@ func (cw *ChunkWriter) SetOffset(offsetCol, offsetRow int) {
 // canvas coordinates; offset is applied automatically.
 func (cw *ChunkWriter) MoveCursor(col, row int) {
 	cw.buf.WriteString("\033[")
-	cw.buf.WriteString(strconv.Itoa(row + cw.offRow))
+	cw.buf.Write(strconv.AppendInt(cw.numBuf[:0], int64(row+cw.offRow), 10))
 	cw.buf.WriteByte(';')
-	cw.buf.WriteString(strconv.Itoa(col + cw.offCol))
+	cw.buf.Write(strconv.AppendInt(cw.numBuf[:0], int64(col+cw.offCol), 10))
 	cw.buf.WriteByte('H')
 }
 
@@ -76,12 +82,12 @@ func (cw *ChunkWriter) Flush() error {
 		if len(chunk) > maxChunkSize {
 			chunk = data[:maxChunkSize]
 		}
-		if _, err := io.WriteString(cw.w, chunk); err != nil {
+		if _, err := cw.bufw.WriteString(chunk); err != nil {
 			return err
 		}
 		data = data[len(chunk):]
 	}
-	return nil
+	return cw.bufw.Flush()
 }
 
 // TermSizeFunc is a function that returns the terminal dimensions.

@@ -45,6 +45,12 @@ const (
 	cellFull                   // '█'
 )
 
+// prevCells packing: low 2 bits = cell state, bit 2 = dirty from MarkTextDirty.
+const (
+	cellStateMask = 0x03
+	cellDirtyBit  = 0x04
+)
+
 // Canvas is a drawing buffer with 2x vertical resolution using half-block characters.
 // Supports scaling from logical coordinates to actual terminal pixels.
 // Uses double-buffering to only write cells that changed between frames,
@@ -67,9 +73,9 @@ type Canvas struct {
 	offsetRow int
 
 	// Double-buffering: track previous frame's cell states to render only diffs.
-	prevCells   []cellState // Previous frame's cell state per terminal cell
-	dirtyMask   []bool      // Cells dirtied by external draws (UI text, names)
-	forceRedraw bool        // Force all cells to be re-rendered next frame
+	// prevCells packs state (low 2 bits) and dirty flag (bit 2) in one byte per cell.
+	prevCells   []byte // Packed: cellStateMask = state, cellDirtyBit = externally dirtied
+	forceRedraw bool   // Force all cells to be re-rendered next frame
 
 	// Reusable buffers to reduce allocations
 	renderBuf       strings.Builder // Buffer for batching render output
@@ -101,8 +107,7 @@ func NewScaledCanvas(termWidth, termHeight int, logicalWidth, logicalHeight floa
 		logicalHeight:  logicalHeight,
 		scaleX:         float64(termWidth) / logicalWidth,
 		scaleY:         float64(subPixelHeight) / logicalHeight,
-		prevCells:      make([]cellState, totalCells),
-		dirtyMask:      make([]bool, totalCells),
+		prevCells:      make([]byte, totalCells),
 		forceRedraw:    true, // First frame must render everything
 	}
 }
@@ -116,8 +121,7 @@ func (c *Canvas) Resize(termWidth, termHeight int) {
 	if termWidth != c.termWidth || termHeight != c.termHeight {
 		totalCells := termWidth * termHeight
 		c.pixels = make([]bool, subPixelHeight*termWidth)
-		c.prevCells = make([]cellState, totalCells)
-		c.dirtyMask = make([]bool, totalCells)
+		c.prevCells = make([]byte, totalCells)
 		c.forceRedraw = true
 		c.termWidth = termWidth
 		c.termHeight = termHeight
@@ -309,7 +313,10 @@ const maxChunkSize = 1400
 // the need for full-screen clearing and reducing SSH bandwidth.
 func (c *Canvas) Render(cw *ChunkWriter) {
 	c.renderBuf.Reset()
-	c.renderBuf.Grow(c.termWidth * c.termHeight * 4) // Conservative estimate for diff output
+	minCap := c.termWidth * c.termHeight * 4
+	if c.renderBuf.Cap() < minCap {
+		c.renderBuf.Grow(minCap - c.renderBuf.Cap())
+	}
 
 	force := c.forceRedraw
 	c.forceRedraw = false
@@ -338,9 +345,10 @@ func (c *Canvas) Render(cw *ChunkWriter) {
 			}
 
 			cellIdx := rowBase + col
-			prev := c.prevCells[cellIdx]
-			dirty := c.dirtyMask[cellIdx]
-			c.prevCells[cellIdx] = current
+			packed := c.prevCells[cellIdx]
+			prev := cellState(packed & cellStateMask)
+			dirty := packed&cellDirtyBit != 0
+			c.prevCells[cellIdx] = byte(current)
 
 			if !force && !dirty && current == prev {
 				continue // No change, skip this cell
@@ -366,8 +374,10 @@ func (c *Canvas) Render(cw *ChunkWriter) {
 		}
 	}
 
-	// Clear dirty mask for next frame
-	clear(c.dirtyMask)
+	// Clear dirty bits for next frame (cells we skipped retain state but not dirty)
+	for i := range c.prevCells {
+		c.prevCells[i] &= cellStateMask
+	}
 
 	cw.WriteString(c.renderBuf.String())
 }
@@ -488,7 +498,7 @@ func (c *Canvas) MarkTextDirty(col, row, width int) {
 	for i := 0; i < width; i++ {
 		ci := c0 + i
 		if ci >= 0 && ci < c.termWidth {
-			c.dirtyMask[base+ci] = true
+			c.prevCells[base+ci] |= cellDirtyBit
 		}
 	}
 }

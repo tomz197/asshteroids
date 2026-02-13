@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -23,6 +24,8 @@ import (
 	"github.com/tomz197/asteroids/internal/draw"
 	"github.com/tomz197/asteroids/internal/loop/client"
 	"github.com/tomz197/asteroids/internal/loop/server"
+
+	_ "net/http/pprof"
 )
 
 const (
@@ -52,6 +55,12 @@ func main() {
 		log.Printf("Failed to get working directory: %v", workErr)
 	}
 	log.Printf("SSH config: host=%s port=%s hostKeyPath=%s workingDir=%s", host, port, hostKeyPath, workingDir)
+
+	// Initialize pprof server
+	go func() {
+		http.ListenAndServe(":6060", nil)
+		log.Printf("Pprof server started on http://localhost:6060")
+	}()
 
 	// Initialize and start the shared game server
 	serverOnce.Do(func() {
