@@ -52,12 +52,13 @@ var _ GameServer = (*Server)(nil)
 
 // ClientHandle represents a client's connection to the server.
 type ClientHandle struct {
-	ID             int
-	Username       string // Display name for this client
-	Player         *object.User
-	Input          object.Input
-	EventsCh       chan ClientEvent // Events sent to client (death, etc.)
-	InvincibleTime float64          // Remaining invincibility time in seconds
+	ID                  int
+	Username            string // Display name for this client
+	Player              *object.User
+	Input               object.Input
+	EventsCh            chan ClientEvent // Events sent to client (death, etc.)
+	InvincibleTime      float64          // Remaining invincibility time in seconds
+	RespawnTimeRemaining float64         // Seconds until respawn is allowed (set on death)
 }
 
 // ClientInput represents input from a specific client.
@@ -242,6 +243,11 @@ func (s *Server) SpawnPlayer(clientID int) {
 		return
 	}
 
+	// Enforce respawn timeout
+	if handle.RespawnTimeRemaining > 0 {
+		return
+	}
+
 	// Remove existing player if any
 	if handle.Player != nil {
 		s.removeObjectLocked(handle.Player)
@@ -344,6 +350,12 @@ func (s *Server) updateWorld() {
 			handle.InvincibleTime -= dt
 			if handle.InvincibleTime < 0 {
 				handle.InvincibleTime = 0
+			}
+		}
+		if handle.Player == nil && handle.RespawnTimeRemaining > 0 {
+			handle.RespawnTimeRemaining -= dt
+			if handle.RespawnTimeRemaining < 0 {
+				handle.RespawnTimeRemaining = 0
 			}
 		}
 	}
@@ -495,6 +507,7 @@ func (s *Server) checkCollisions() {
 			// Mark player for removal (deferred compaction)
 			s.toRemove[handle.Player] = struct{}{}
 			handle.Player = nil
+			handle.RespawnTimeRemaining = config.RespawnTimeoutSeconds
 
 			// Notify client
 			select {

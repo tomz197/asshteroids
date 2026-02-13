@@ -29,8 +29,9 @@ type ClientState struct {
 	Player         *object.User      // Reference to this client's ship (from server)
 	Score          int               // This client's score
 	Lives          int               // This client's remaining lives
-	InvincibleTime float64           // Remaining invincibility time in seconds
-	termSizeFunc   draw.TermSizeFunc // Function to get terminal size
+	InvincibleTime       float64           // Remaining invincibility time in seconds
+	RespawnTimeRemaining float64           // Seconds until respawn is allowed (set on death)
+	termSizeFunc         draw.TermSizeFunc // Function to get terminal size
 	Running        bool              // Client loop running
 	delta          time.Duration     // Frame delta time (client-side)
 	shutdownTimer  float64           // Countdown before auto-disconnect on shutdown

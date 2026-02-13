@@ -168,6 +168,7 @@ func (c *Client) processServerEvents() {
 				c.state.Lives--
 				c.state.GameState = GameStateDead
 				c.state.Player = nil
+				c.state.RespawnTimeRemaining = config.RespawnTimeoutSeconds
 			case server.EventScoreAdd:
 				c.state.Score += event.ScoreAdd
 			case server.EventServerShutdown:
@@ -244,7 +245,13 @@ func (c *Client) updatePlayingState() {
 
 // updateDeadState handles the death screen.
 func (c *Client) updateDeadState() {
-	if c.state.Input.Space || c.state.Input.Enter {
+	if c.state.RespawnTimeRemaining > 0 {
+		c.state.RespawnTimeRemaining -= c.state.delta.Seconds()
+		if c.state.RespawnTimeRemaining < 0 {
+			c.state.RespawnTimeRemaining = 0
+		}
+	}
+	if (c.state.Input.Space || c.state.Input.Enter) && c.state.RespawnTimeRemaining <= 0 {
 		c.startGame()
 	}
 }

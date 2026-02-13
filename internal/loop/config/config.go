@@ -14,7 +14,7 @@ const (
 // Ship stays centered while the camera follows it.
 const (
 	WorldWidth  = 400 // Total world width
-	WorldHeight = 300 // Total world height
+	WorldHeight = 400 // Total world height
 )
 
 // Scoring
@@ -26,10 +26,11 @@ const (
 
 // Player
 const (
-	InitialLives         = 3
-	InvincibilitySeconds = 3.0
-	PlayerBlinkFrequency = 10.0 // Hz
-	MaxUsernameLength    = 16   // Maximum display length for player usernames
+	InitialLives          = 3
+	InvincibilitySeconds  = 3.0
+	RespawnTimeoutSeconds = 3.0  // Seconds to wait after death before respawn is allowed
+	PlayerBlinkFrequency  = 10.0 // Hz
+	MaxUsernameLength     = 16   // Maximum display length for player usernames
 )
 
 // Spawning
@@ -51,8 +52,8 @@ const (
 // Maximum terminal render resolution.
 // If the user's terminal is larger, the render area is centered with a border.
 const (
-	MaxTermWidth  = 230 // Maximum terminal columns for rendering
-	MaxTermHeight = 65  // Maximum terminal rows for rendering
+	MaxTermWidth  = 240 // Maximum terminal columns for rendering
+	MaxTermHeight = 80  // Maximum terminal rows for rendering
 )
 
 // Client rendering

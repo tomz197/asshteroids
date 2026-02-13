@@ -257,8 +257,12 @@ func (c *Client) drawDeadScreen(centerX, centerY int) {
 		fmt.Fprint(c.writer, livesText)
 	}
 
-	// Blinking prompt
-	if time.Now().UnixMilli()/600%2 == 0 {
+	// Respawn countdown or prompt
+	if c.state.RespawnTimeRemaining > 0 {
+		countdown := fmt.Sprintf("Respawn in %.1f seconds...", c.state.RespawnTimeRemaining)
+		c.moveCursor(centerX-len(countdown)/2, titleStartY+len(titleArt)+5)
+		fmt.Fprint(c.writer, countdown)
+	} else if time.Now().UnixMilli()/600%2 == 0 {
 		var prompt string
 		if c.state.Lives > 0 {
 			prompt = ">>  Press SPACE to Continue  <<"
