@@ -18,6 +18,7 @@ type Client struct {
 	handle       *server.ClientHandle
 	state        *ClientState
 	canvas       *draw.Canvas
+	chunkWriter  *draw.ChunkWriter // Accumulates UI text for chunked output
 	reader       *bufio.Reader
 	writer       io.Writer
 	inputStream  *input.Stream
@@ -62,12 +63,14 @@ func NewClient(gs server.GameServer, r *bufio.Reader, w io.Writer, opts ClientOp
 	renderWidth, renderHeight, offsetCol, offsetRow := clampTermSize(termWidth, termHeight)
 	canvas := draw.NewScaledCanvas(renderWidth, renderHeight, config.ViewWidth, config.ViewHeight)
 	canvas.SetOffset(offsetCol, offsetRow)
+	chunkWriter := draw.NewChunkWriter(w, offsetCol, offsetRow)
 
 	return &Client{
 		server:       gs,
 		handle:       handle,
 		state:        state,
 		canvas:       canvas,
+		chunkWriter:  chunkWriter,
 		reader:       r,
 		writer:       w,
 		lastInput:    time.Now(),
@@ -199,6 +202,7 @@ func (c *Client) updateScreen() {
 
 	c.canvas.Resize(renderWidth, renderHeight)
 	c.canvas.SetOffset(offsetCol, offsetRow)
+	c.chunkWriter.SetOffset(offsetCol, offsetRow)
 }
 
 // clampTermSize clamps terminal dimensions to the max render resolution and computes

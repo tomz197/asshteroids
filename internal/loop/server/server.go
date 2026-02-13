@@ -52,13 +52,13 @@ var _ GameServer = (*Server)(nil)
 
 // ClientHandle represents a client's connection to the server.
 type ClientHandle struct {
-	ID                  int
-	Username            string // Display name for this client
-	Player              *object.User
-	Input               object.Input
-	EventsCh            chan ClientEvent // Events sent to client (death, etc.)
-	InvincibleTime      float64          // Remaining invincibility time in seconds
-	RespawnTimeRemaining float64         // Seconds until respawn is allowed (set on death)
+	ID                   int
+	Username             string // Display name for this client
+	Player               *object.User
+	Input                object.Input
+	EventsCh             chan ClientEvent // Events sent to client (death, etc.)
+	InvincibleTime       float64          // Remaining invincibility time in seconds
+	RespawnTimeRemaining float64          // Seconds until respawn is allowed (set on death)
 }
 
 // ClientInput represents input from a specific client.

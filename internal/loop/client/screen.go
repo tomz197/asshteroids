@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/tomz197/asteroids/internal/draw"
@@ -195,6 +196,11 @@ func (c *Client) drawPlayingHUD(termWidth, termHeight int, snapshot *server.Worl
 	c.moveCursor(termWidth-len(livesText)-1, 1)
 	fmt.Fprint(c.writer, livesText)
 
+	// Minimap (top right, below lives)
+	if c.state.Player != nil {
+		c.drawMinimap(termWidth, termHeight, snapshot)
+	}
+
 	// Live players (bottom right)
 	livePlayersText := fmt.Sprintf("Players: %-4d", snapshot.Players)
 	c.moveCursor(termWidth-len(livePlayersText)-1, termHeight)
@@ -206,6 +212,112 @@ func (c *Client) drawPlayingHUD(termWidth, termHeight int, snapshot *server.Worl
 		coordText := fmt.Sprintf("X:%-5.0f Y:%-5.0f", px, py)
 		c.moveCursor(2, termHeight)
 		fmt.Fprint(c.writer, coordText)
+	}
+}
+
+// drawMinimap draws a small overview of the world showing the local player and others.
+// Uses half-block characters (▀▄█) for 2x vertical resolution. Self is bright cyan, others dim.
+func (c *Client) drawMinimap(termWidth, termHeight int, snapshot *server.WorldSnapshot) {
+	worldW := float64(snapshot.World.Width)
+	worldH := float64(snapshot.World.Height)
+	if worldW <= 0 || worldH <= 0 {
+		return
+	}
+
+	// Build minimap grid: 0=empty, 1=other, 2=self (self overwrites)
+	grid := &c.state.minimapGrid
+	*grid = [minimapSubRows][minimapWidth]byte{} // Clear
+
+	// Map all players to grid cells (2x vertical resolution)
+	for _, user := range snapshot.UserObjects {
+		x, y := user.GetPosition()
+		col := int(x / worldW * float64(minimapWidth))
+		subRow := int(y / worldH * float64(minimapSubRows))
+		if col < 0 {
+			col = 0
+		}
+		if col >= minimapWidth {
+			col = minimapWidth - 1
+		}
+		if subRow < 0 {
+			subRow = 0
+		}
+		if subRow >= minimapSubRows {
+			subRow = minimapSubRows - 1
+		}
+		if user == c.state.Player {
+			grid[subRow][col] = 2 // Self
+		} else if grid[subRow][col] == 0 {
+			grid[subRow][col] = 1 // Other (don't overwrite self)
+		}
+	}
+
+	// Position: top-right, below lives
+	startCol := termWidth - minimapWidth - 3 // border + padding
+	startRow := 3
+	if startCol < 1 || startRow+minimapHeight+1 > termHeight {
+		return // Not enough space
+	}
+
+	// Accumulate minimap output for chunked write
+	cw := c.chunkWriter
+	cw.MoveCursor(startCol, startRow)
+	cw.Write("┌")
+	cw.Write(strings.Repeat("─", minimapWidth))
+	cw.Write("┐")
+	c.canvas.MarkTextDirty(startCol, startRow, minimapWidth+2)
+
+	// Each terminal row combines 2 sub-rows via half-block characters (▀▄█)
+	for termRow := 0; termRow < minimapHeight; termRow++ {
+		cw.WriteAt(startCol, startRow+1+termRow, "│")
+		curColor := ""
+		for col := 0; col < minimapWidth; col++ {
+			top := grid[termRow*2][col]
+			bot := grid[termRow*2+1][col]
+			topFilled := top != 0
+			botFilled := bot != 0
+			isSelf := top == 2 || bot == 2
+			wantColor := draw.ColorReset // Default color for others
+			if isSelf {
+				wantColor = draw.ColorBrightCyan // Bright cyan for current player
+			}
+			var r rune
+			switch {
+			case topFilled && botFilled:
+				r = draw.BlockFull
+			case topFilled && !botFilled:
+				r = draw.BlockUpperHalf
+			case !topFilled && botFilled:
+				r = draw.BlockLowerHalf
+			default:
+				r = ' '
+			}
+			if r != ' ' {
+				if curColor != wantColor {
+					cw.Write(wantColor)
+					curColor = wantColor
+				}
+			} else if curColor != "" {
+				cw.Write(draw.ColorReset)
+				curColor = ""
+			}
+			cw.WriteRune(r)
+		}
+		if curColor != "" {
+			cw.Write(draw.ColorReset)
+		}
+		cw.Write("│")
+		c.canvas.MarkTextDirty(startCol, startRow+1+termRow, minimapWidth+2)
+	}
+
+	cw.MoveCursor(startCol, startRow+1+minimapHeight)
+	cw.Write("└")
+	cw.Write(strings.Repeat("─", minimapWidth))
+	cw.Write("┘")
+	c.canvas.MarkTextDirty(startCol, startRow+1+minimapHeight, minimapWidth+2)
+
+	if err := cw.Flush(); err != nil {
+		return
 	}
 }
 
