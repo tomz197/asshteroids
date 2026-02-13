@@ -22,6 +22,7 @@ const (
 	ScoreLargeAsteroid  = 20
 	ScoreMediumAsteroid = 50
 	ScoreSmallAsteroid  = 100
+	ScorePlayerKill     = 1000
 )
 
 // Player

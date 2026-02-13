@@ -42,6 +42,7 @@ type ClientState struct {
 	Lives                int               // This client's remaining lives
 	InvincibleTime       float64           // Remaining invincibility time in seconds
 	RespawnTimeRemaining float64           // Seconds until respawn is allowed (set on death)
+	KilledBy             string            // Username of player who killed this one (empty if asteroid)
 	termSizeFunc         draw.TermSizeFunc // Function to get terminal size
 	Running              bool              // Client loop running
 	delta                time.Duration     // Frame delta time (client-side)

@@ -172,6 +172,7 @@ func (c *Client) processServerEvents() {
 				c.state.GameState = GameStateDead
 				c.state.Player = nil
 				c.state.RespawnTimeRemaining = config.RespawnTimeoutSeconds
+				c.state.KilledBy = event.KilledBy
 			case server.EventScoreAdd:
 				c.state.Score += event.ScoreAdd
 			case server.EventServerShutdown:

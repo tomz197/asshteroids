@@ -331,9 +331,17 @@ func (c *Client) drawDeadScreen(centerX, centerY int) {
 		cw.WriteAt(centerX-titleWidth/2, titleStartY+i, line)
 	}
 
+	// Killed by (when killed by another player)
+	offset := 0
+	if c.state.KilledBy != "" {
+		killedByText := fmt.Sprintf("Killed by %s", c.state.KilledBy)
+		cw.WriteAt(centerX-len(killedByText)/2, titleStartY+len(titleArt)+offset, killedByText)
+		offset++
+	}
+
 	// Score
 	scoreText := fmt.Sprintf("Score: %d", c.state.Score)
-	cw.WriteAt(centerX-len(scoreText)/2, titleStartY+len(titleArt)+1, scoreText)
+	cw.WriteAt(centerX-len(scoreText)/2, titleStartY+len(titleArt)+offset+1, scoreText)
 
 	// Lives or game over info
 	if c.state.Lives > 0 {

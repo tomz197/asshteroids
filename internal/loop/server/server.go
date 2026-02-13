@@ -469,6 +469,7 @@ func (s *Server) checkCollisions() {
 		ownerID := handle.ID
 
 		hit := false
+		killerID := -1 // -1 means killed by asteroid or other, not another player
 
 		// Check projectile hits via projectile grid (skip own projectiles)
 		s.world.projectileGrid.QueryAround(px, py, func(pi int) bool {
@@ -479,6 +480,7 @@ func (s *Server) checkCollisions() {
 			if physics.PointInCircle(p.X, p.Y, px, py, pr) {
 				p.MarkDestroyed()
 				hit = true
+				killerID = p.OwnerID
 				return true // Found a hit, stop checking
 			}
 			return false
@@ -500,6 +502,18 @@ func (s *Server) checkCollisions() {
 		}
 
 		if hit {
+			// Award score to killer when player was killed by another player's projectile
+			var killerHandle *ClientHandle
+			if killerID >= 0 {
+				if h, ok := s.clients[killerID]; ok {
+					killerHandle = h
+					select {
+					case killerHandle.EventsCh <- ClientEvent{Type: EventScoreAdd, ScoreAdd: config.ScorePlayerKill}:
+					default:
+					}
+				}
+			}
+
 			// Spawn death explosion
 			x, y := handle.Player.GetPosition()
 			object.SpawnExplosion(x, y, 20, 25.0, 1.0, s.world)
@@ -509,9 +523,13 @@ func (s *Server) checkCollisions() {
 			handle.Player = nil
 			handle.RespawnTimeRemaining = config.RespawnTimeoutSeconds
 
-			// Notify client
+			// Notify client (include killer username when killed by another player)
+			killedBy := ""
+			if killerHandle != nil {
+				killedBy = killerHandle.Username
+			}
 			select {
-			case handle.EventsCh <- ClientEvent{Type: EventPlayerDied}:
+			case handle.EventsCh <- ClientEvent{Type: EventPlayerDied, KilledBy: killedBy}:
 			default:
 			}
 		}
