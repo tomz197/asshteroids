@@ -7,6 +7,13 @@ import (
 	"github.com/tomz197/asteroids/internal/physics"
 )
 
+// TopScoreEntry represents a single entry on the leaderboard.
+type TopScoreEntry struct {
+	Username string
+	Score    int
+	clientID int // Used for deterministic tie-break when scores are equal
+}
+
 // WorldState holds shared game state (objects, world bounds, timing).
 // This is managed by the Server and shared across all clients via snapshots.
 type WorldState struct {
@@ -33,6 +40,7 @@ type WorldSnapshot struct {
 	Players     int
 	World       object.Screen
 	Delta       time.Duration
+	TopScores   []TopScoreEntry // Top N scores for leaderboard display
 }
 
 // collisionGridCellSize is the cell size for the spatial hash grids.

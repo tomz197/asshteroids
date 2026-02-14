@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tomz197/asteroids/internal/draw"
 	"github.com/tomz197/asteroids/internal/loop/config"
@@ -85,7 +86,7 @@ func (c *Client) drawUI(snapshot *server.WorldSnapshot) {
 	case GameStatePlaying:
 		c.drawPlayingHUD(termWidth, termHeight, snapshot)
 	case GameStateStart:
-		c.drawStartScreen(centerX, centerY)
+		c.drawStartScreen(centerX, centerY, snapshot)
 	case GameStateDead:
 		c.drawDeadScreen(centerX, centerY)
 	}
@@ -108,7 +109,7 @@ func (c *Client) drawInactivityScreen(centerX, centerY int) {
 }
 
 // drawStartScreen draws the title screen.
-func (c *Client) drawStartScreen(centerX, centerY int) {
+func (c *Client) drawStartScreen(centerX, centerY int, snapshot *server.WorldSnapshot) {
 	// ASCII art title (figlet "small" font)
 	titleArt := []string{
 		`    _   ___ ___ _  _ _____ ___ ___  ___ ___ ___  ___  `,
@@ -158,6 +159,9 @@ func (c *Client) drawStartScreen(centerX, centerY int) {
 		cw.WriteAt(centerX-len(prompt)/2, controlsY+len(controlLines)+2, prompt)
 	}
 
+	// Top scores (right of controls)
+	c.drawTopScores(cw, centerX+22, controlsY, snapshot.TopScores)
+
 	// GitHub link (OSC 8 clickable hyperlink)
 	ghURL := "https://github.com/tomz197/asshteroids"
 	ghLabel := "Click to view on github"
@@ -168,6 +172,34 @@ func (c *Client) drawStartScreen(centerX, centerY int) {
 	cw.WriteAt(centerX-len(ghLabel2)/2, controlsY+len(controlLines)+5, ghLine2)
 }
 
+// drawTopScores draws the top scores leaderboard at the given position.
+func (c *Client) drawTopScores(cw *draw.ChunkWriter, col, row int, topScores []server.TopScoreEntry) {
+	if len(topScores) == 0 {
+		return
+	}
+	header := "Top Scores"
+	cw.WriteAt(col, row, header)
+	for i, e := range topScores {
+		line := fmt.Sprintf("#%-2d %-12s %6d", i+1, truncate(e.Username, 12), e.Score)
+		cw.WriteAt(col, row+1+i, line)
+	}
+}
+
+// truncate shortens s to at most maxLen runes.
+func truncate(s string, maxLen int) string {
+	if utf8.RuneCountInString(s) <= maxLen {
+		return s
+	}
+	n := 0
+	for i := range s {
+		if n == maxLen {
+			return s[:i]
+		}
+		n++
+	}
+	return s
+}
+
 // drawPlayingHUD draws the in-game HUD.
 // Text fields use fixed-width formatting so shrinking values don't leave
 // residual characters on screen (since we no longer clear every frame).
@@ -176,6 +208,13 @@ func (c *Client) drawPlayingHUD(termWidth, termHeight int, snapshot *server.Worl
 	// Score display (top left) — left-aligned, padded to 8 digits
 	scoreText := fmt.Sprintf("Score: %-8d", c.state.Score)
 	cw.WriteAt(2, 1, scoreText)
+
+	// Top scores (left, below score) — show top 5 in-game to save space
+	top5 := snapshot.TopScores
+	if len(top5) > 5 {
+		top5 = top5[:5]
+	}
+	c.drawTopScores(cw, 2, 3, top5)
 
 	// Lives display (top right)
 	livesText := fmt.Sprintf("Lives: %-3d", c.state.Lives)

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"math/rand"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,6 +24,7 @@ type GameServer interface {
 	GetClientPlayer(clientID int) *object.User
 	SpawnPlayer(clientID int)
 	RemovePlayer(clientID int)
+	ResetScore(clientID int)
 }
 
 // Server manages the shared world state and processes inputs from all clients.
@@ -57,6 +59,8 @@ type ClientHandle struct {
 	Player               *object.User
 	Input                object.Input
 	EventsCh             chan ClientEvent // Events sent to client (death, etc.)
+	Score                int              // Current game score (resets on restart)
+	BestScore            int              // Highest score achieved this session (never resets)
 	InvincibleTime       float64          // Remaining invincibility time in seconds
 	RespawnTimeRemaining float64          // Seconds until respawn is allowed (set on death)
 }
@@ -278,6 +282,16 @@ func (s *Server) RemovePlayer(clientID int) {
 	handle.Player = nil
 }
 
+// ResetScore resets the current game score for a client (e.g. on full restart after game over).
+// BestScore is preserved for the top scores leaderboard.
+func (s *Server) ResetScore(clientID int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if handle, ok := s.clients[clientID]; ok {
+		handle.Score = 0
+	}
+}
+
 // removeObjectLocked removes a single object from the world. Must be called with lock held.
 func (s *Server) removeObjectLocked(target object.Object) {
 	s.world.RemoveObject(target)
@@ -442,8 +456,13 @@ func (s *Server) checkCollisions() {
 
 				// Award score to the client that owns this projectile
 				if handle, ok := s.clients[p.OwnerID]; ok {
+					add := asteroidScore(a.Size)
+					handle.Score += add
+					if handle.Score > handle.BestScore {
+						handle.BestScore = handle.Score
+					}
 					select {
-					case handle.EventsCh <- ClientEvent{Type: EventScoreAdd, ScoreAdd: asteroidScore(a.Size)}:
+					case handle.EventsCh <- ClientEvent{Type: EventScoreAdd, ScoreAdd: add}:
 					default:
 					}
 				}
@@ -507,6 +526,10 @@ func (s *Server) checkCollisions() {
 			if killerID >= 0 {
 				if h, ok := s.clients[killerID]; ok {
 					killerHandle = h
+					killerHandle.Score += config.ScorePlayerKill
+					if killerHandle.Score > killerHandle.BestScore {
+						killerHandle.BestScore = killerHandle.Score
+					}
 					select {
 					case killerHandle.EventsCh <- ClientEvent{Type: EventScoreAdd, ScoreAdd: config.ScorePlayerKill}:
 					default:
@@ -567,13 +590,44 @@ func (s *Server) createSnapshot() {
 	buf = buf[:len(s.world.Objects)]
 	copy(buf, s.world.Objects)
 
+	// Build top scores leaderboard
+	topScores := s.buildTopScoresLocked()
+
 	snapshot := &WorldSnapshot{
 		Objects:     buf,
 		UserObjects: object.FilterUsers(buf),
 		Players:     len(s.clients),
 		World:       s.world.World,
 		Delta:       s.world.Delta,
+		TopScores:   topScores,
 	}
 
 	s.snapshot.Store(snapshot)
+}
+
+// buildTopScoresLocked builds the top N scores from connected clients.
+// Must be called with s.mu held.
+func (s *Server) buildTopScoresLocked() []TopScoreEntry {
+	if len(s.clients) == 0 {
+		return nil
+	}
+	entries := make([]TopScoreEntry, 0, len(s.clients))
+	for _, h := range s.clients {
+		name := h.Username
+		if name == "" {
+			name = "(anon)"
+		}
+		entries = append(entries, TopScoreEntry{Username: name, Score: h.BestScore, clientID: h.ID})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Score != entries[j].Score {
+			return entries[i].Score > entries[j].Score
+		}
+		return entries[i].clientID < entries[j].clientID
+	})
+	n := config.TopScoresCount
+	if n > len(entries) {
+		n = len(entries)
+	}
+	return entries[:n]
 }

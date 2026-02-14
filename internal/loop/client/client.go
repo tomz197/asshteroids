@@ -274,6 +274,7 @@ func (c *Client) startGame() {
 		// Full restart
 		c.state.Score = 0
 		c.state.Lives = config.InitialLives
+		c.server.ResetScore(c.handle.ID)
 	}
 
 	// Request server to spawn player
