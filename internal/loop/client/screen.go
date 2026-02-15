@@ -14,15 +14,17 @@ import (
 
 // drawFrame draws the current frame.
 func (c *Client) drawFrame() error {
-	// On game state or inactivity transitions, do a full terminal clear
+	// On game state, inactivity, or chat transitions, do a full terminal clear
 	// so UI elements from the previous state don't persist on screen.
 	stateChanged := c.state.GameState != c.state.prevGameState
 	inactiveChanged := c.state.isInactive != c.state.wasInactive
-	if stateChanged || inactiveChanged {
+	chatOpenChanged := c.state.ChatOpen != c.state.prevChatOpen
+	if stateChanged || inactiveChanged || chatOpenChanged {
 		c.chunkWriter.WriteString("\033[H\033[2J")
 		c.canvas.ForceRedraw()
 		c.state.prevGameState = c.state.GameState
 		c.state.wasInactive = c.state.isInactive
+		c.state.prevChatOpen = c.state.ChatOpen
 	}
 
 	c.canvas.Clear()
@@ -62,6 +64,9 @@ func (c *Client) drawFrame() error {
 	// Draw UI overlay
 	c.drawUI(snapshot)
 
+	// Draw chat (overlays all screens)
+	c.drawChat(snapshot)
+
 	return c.chunkWriter.Flush()
 }
 
@@ -89,6 +94,92 @@ func (c *Client) drawUI(snapshot *server.WorldSnapshot) {
 		c.drawStartScreen(centerX, centerY, snapshot)
 	case GameStateDead:
 		c.drawDeadScreen(centerX, centerY)
+	}
+}
+
+// chatHistoryLines is the number of chat history lines to display when chat is closed.
+const chatHistoryLines = 6
+
+// chatHistoryLinesActive is the number of chat history lines when chat input is open.
+const chatHistoryLinesActive = 12
+
+// chatWidth is the fixed width of the chat column (narrow so game remains visible).
+const chatWidth = 40
+
+// drawChat draws the chat history and input box. Overlays all screens.
+// Uses a narrow column so asteroids remain visible. Pads lines to clear artefacts.
+func (c *Client) drawChat(snapshot *server.WorldSnapshot) {
+	termHeight := c.canvas.TerminalHeight()
+	cw := c.chunkWriter
+
+	messages := snapshot.ChatMessages
+	if messages == nil {
+		messages = []server.ChatMessage{}
+	}
+
+	msgRows := chatHistoryLines
+	if c.state.ChatOpen {
+		msgRows = chatHistoryLinesActive
+	}
+	displayCount := msgRows
+	if len(messages) < displayCount {
+		displayCount = len(messages)
+	}
+	displayMessages := messages
+	if len(messages) > msgRows {
+		start := len(messages) - msgRows
+		if start < 0 {
+			start = 0
+		}
+		displayMessages = messages[start:]
+		displayCount = msgRows
+	}
+
+	// Layout: when chat open, input and hint use 2 rows at bottom
+	inputRow := termHeight - 1
+	hintRow := termHeight
+	historyStart := termHeight - msgRows
+	if c.state.ChatOpen {
+		historyStart = termHeight - msgRows - 2
+		inputRow = termHeight - 1
+		hintRow = termHeight
+	}
+
+	// Draw messages (wrap to multiple lines if needed)
+	var allLines []string
+	for i := 0; i < displayCount; i++ {
+		m := displayMessages[i]
+		fullLine := truncate(m.Username, 12) + ": " + m.Text
+		allLines = append(allLines, wrapText(fullLine, chatWidth)...)
+	}
+	// Take last N lines to fit in available rows (newest at bottom)
+	lineStart := 0
+	if len(allLines) > msgRows {
+		lineStart = len(allLines) - msgRows
+	}
+	for i := 0; i < msgRows && lineStart+i < len(allLines); i++ {
+		row := historyStart + i
+		if row >= 1 && row <= termHeight {
+			line := allLines[lineStart+i]
+			c.canvas.MarkTextDirty(2, row, len(line))
+			cw.WriteAt(2, row, line)
+		}
+	}
+
+	if c.state.ChatOpen {
+		hint := "ESC to close, Enter to send"
+		cw.WriteAt(2, hintRow, hint)
+
+		prompt := "> " + c.state.ChatInput
+		if utf8.RuneCountInString(prompt) > config.MaxChatMessageLength {
+			prompt = truncate(prompt, config.MaxChatMessageLength)
+		}
+		cw.WriteAt(2, inputRow, prompt)
+		c.canvas.MarkTextDirty(2, inputRow, chatWidth)
+		c.canvas.MarkTextDirty(2, hintRow, chatWidth)
+	} else {
+		hint := "Press C to strat chatting"
+		cw.WriteAt(2, hintRow, hint)
 	}
 }
 
@@ -147,6 +238,7 @@ func (c *Client) drawStartScreen(centerX, centerY int, snapshot *server.WorldSna
 		"W / Up  . . . . Thrust",
 		"A D / < >  . .  Rotate",
 		"SPACE  . . . . . Shoot",
+		"C  . . . . . . . Chat",
 		"Q  . . . . . . .  Quit",
 	}
 	for i, line := range controlLines {
@@ -185,6 +277,32 @@ func (c *Client) drawTopScores(cw *draw.ChunkWriter, col, row int, topScores []s
 	}
 }
 
+// wrapText splits s into lines of at most maxWidth runes.
+func wrapText(s string, maxWidth int) []string {
+	if maxWidth <= 0 {
+		return []string{s}
+	}
+	var lines []string
+	for len(s) > 0 {
+		if utf8.RuneCountInString(s) <= maxWidth {
+			lines = append(lines, s)
+			break
+		}
+		n := 0
+		cut := len(s) // fallback if inner loop never breaks
+		for i := range s {
+			if n == maxWidth {
+				cut = i
+				break
+			}
+			n++
+		}
+		lines = append(lines, s[:cut])
+		s = strings.TrimLeft(s[cut:], " ")
+	}
+	return lines
+}
+
 // truncate shortens s to at most maxLen runes.
 func truncate(s string, maxLen int) string {
 	if utf8.RuneCountInString(s) <= maxLen {
@@ -221,20 +339,22 @@ func (c *Client) drawPlayingHUD(termWidth, termHeight int, snapshot *server.Worl
 	cw.WriteAt(termWidth-len(livesText)-1, 1, livesText)
 
 	// Minimap (top right, below lives)
+	minimapStartCol := termWidth - minimapWidth - 3
+	minimapStartRow := 3
 	if c.state.Player != nil {
 		c.drawMinimap(termWidth, termHeight, snapshot)
+	}
+
+	// Coordinates display (under minimap)
+	if c.state.Player != nil && minimapStartCol >= 1 && minimapStartRow+minimapHeight+2 <= termHeight {
+		px, py := c.state.Player.GetPosition()
+		coordText := fmt.Sprintf("X:%-5.0f Y:%-5.0f", px, py)
+		cw.WriteAt(minimapStartCol, minimapStartRow+minimapHeight+2, coordText)
 	}
 
 	// Live players (bottom right)
 	livePlayersText := fmt.Sprintf("Players: %-4d", snapshot.Players)
 	cw.WriteAt(termWidth-len(livePlayersText)-1, termHeight, livePlayersText)
-
-	// Coordinates display (bottom left)
-	if c.state.Player != nil {
-		px, py := c.state.Player.GetPosition()
-		coordText := fmt.Sprintf("X:%-5.0f Y:%-5.0f", px, py)
-		cw.WriteAt(2, termHeight, coordText)
-	}
 }
 
 // drawMinimap draws a small overview of the world showing the local player and others.

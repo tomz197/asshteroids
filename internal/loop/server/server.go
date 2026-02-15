@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,6 +21,7 @@ type GameServer interface {
 	RegisterClient(username string) *ClientHandle
 	UnregisterClient(clientID int)
 	SendInput(clientID int, input object.Input)
+	SendChatMessage(clientID int, text string)
 	GetSnapshot() *WorldSnapshot
 	GetClientPlayer(clientID int) *object.User
 	SpawnPlayer(clientID int)
@@ -47,6 +49,17 @@ type Server struct {
 
 	// Reusable player set to avoid per-frame allocation
 	playerSet map[object.Object]struct{}
+
+	// Chat message ring buffer and mutex
+	chatMessages []ChatMessage
+	chatMu       sync.RWMutex
+	chatChan     chan chatMessageRequest
+}
+
+// chatMessageRequest is a request to broadcast a chat message.
+type chatMessageRequest struct {
+	clientID int
+	text     string
 }
 
 // Compile-time check that Server implements GameServer.
@@ -106,14 +119,16 @@ func NewServer() *Server {
 		inputChan:    make(chan ClientInput, 256),
 		registerCh:   make(chan *ClientHandle, 16),
 		unregisterCh: make(chan int, 16),
+		chatChan:     make(chan chatMessageRequest, 32),
 		toRemove:     make(map[object.Object]struct{}),
 		playerSet:    make(map[object.Object]struct{}),
 	}
 
 	// Create initial empty snapshot
 	s.snapshot.Store(&WorldSnapshot{
-		Objects: []object.Object{},
-		World:   world.World,
+		Objects:      []object.Object{},
+		World:        world.World,
+		ChatMessages: []ChatMessage{},
 	})
 
 	return s
@@ -139,6 +154,9 @@ func (s *Server) Run(ctx context.Context) {
 
 		// Process registrations/unregistrations
 		s.processRegistrations()
+
+		// Process chat messages
+		s.processChatMessages()
 
 		// Collect all pending inputs
 		s.collectInputs()
@@ -219,6 +237,22 @@ func (s *Server) SendInput(clientID int, input object.Input) {
 	case s.inputChan <- ClientInput{ClientID: clientID, Input: input}:
 	default:
 		// Input channel full, drop input
+	}
+}
+
+// SendChatMessage broadcasts a chat message from a client to all connected clients.
+func (s *Server) SendChatMessage(clientID int, text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	if len(text) > config.MaxChatMessageLength {
+		text = text[:config.MaxChatMessageLength]
+	}
+	select {
+	case s.chatChan <- chatMessageRequest{clientID: clientID, text: text}:
+	default:
+		// Chat channel full, drop message
 	}
 }
 
@@ -323,6 +357,32 @@ func (s *Server) processRegistrations() {
 				delete(s.clients, clientID)
 			}
 			s.mu.Unlock()
+		default:
+			return
+		}
+	}
+}
+
+// processChatMessages handles pending chat message broadcasts.
+func (s *Server) processChatMessages() {
+	for {
+		select {
+		case req := <-s.chatChan:
+			s.mu.RLock()
+			username := "(anon)"
+			if handle, ok := s.clients[req.clientID]; ok && handle.Username != "" {
+				username = handle.Username
+			}
+			s.mu.RUnlock()
+
+			msg := ChatMessage{Username: username, Text: req.text}
+
+			s.chatMu.Lock()
+			s.chatMessages = append(s.chatMessages, msg)
+			if len(s.chatMessages) > config.MaxChatHistory {
+				s.chatMessages = s.chatMessages[len(s.chatMessages)-config.MaxChatHistory:]
+			}
+			s.chatMu.Unlock()
 		default:
 			return
 		}
@@ -593,13 +653,20 @@ func (s *Server) createSnapshot() {
 	// Build top scores leaderboard
 	topScores := s.buildTopScoresLocked()
 
+	// Copy chat messages for snapshot
+	s.chatMu.RLock()
+	chatMessages := make([]ChatMessage, len(s.chatMessages))
+	copy(chatMessages, s.chatMessages)
+	s.chatMu.RUnlock()
+
 	snapshot := &WorldSnapshot{
-		Objects:     buf,
-		UserObjects: object.FilterUsers(buf),
-		Players:     len(s.clients),
-		World:       s.world.World,
-		Delta:       s.world.Delta,
-		TopScores:   topScores,
+		Objects:      buf,
+		UserObjects:  object.FilterUsers(buf),
+		Players:      len(s.clients),
+		World:        s.world.World,
+		Delta:        s.world.Delta,
+		TopScores:    topScores,
+		ChatMessages: chatMessages,
 	}
 
 	s.snapshot.Store(snapshot)

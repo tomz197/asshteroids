@@ -51,6 +51,12 @@ const (
 	InactivityDisconnectUser = 120 // Seconds
 )
 
+// Chat
+const (
+	MaxChatMessageLength = 128 // Maximum characters per chat message
+	MaxChatHistory       = 50  // Messages kept in server buffer
+)
+
 // Maximum terminal render resolution.
 // If the user's terminal is larger, the render area is centered with a border.
 const (

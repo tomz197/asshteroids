@@ -49,6 +49,9 @@ type ClientState struct {
 	shutdownTimer        float64           // Countdown before auto-disconnect on shutdown
 	isInactive           bool              // Whether the client is in inactive warning state
 	wasInactive          bool              // Previous frame's inactivity state (for transition detection)
+	ChatOpen             bool              // Whether chat input box is active
+	ChatInput            string            // Current message being typed
+	prevChatOpen         bool              // Previous frame's chat state (for transition detection)
 }
 
 // NewClientState creates a new initialized client state.

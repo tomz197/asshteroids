@@ -22,6 +22,7 @@ type Input struct {
 	Backspace bool
 	Delete    bool
 	Escape    bool
+	Chat      bool
 	Number    int
 	Pressed   []byte
 }
@@ -40,6 +41,7 @@ type keyState struct {
 	backspace time.Time
 	delete_   time.Time
 	escape    time.Time
+	chat      time.Time
 	number    time.Time
 	numberVal int
 }
@@ -123,18 +125,19 @@ parse:
 
 	// Build input from key state - keys are "pressed" if seen within hold duration
 	input := Input{
-		Quit:      now.Sub(s.state.quit) < keyHoldDuration,
+		Quit:      s.state.quit.Equal(now),
 		Left:      now.Sub(s.state.left) < keyHoldDuration,
 		Right:     now.Sub(s.state.right) < keyHoldDuration,
 		UpLeft:    now.Sub(s.state.upLeft) < keyHoldDuration,
 		UpRight:   now.Sub(s.state.upRight) < keyHoldDuration,
 		Up:        now.Sub(s.state.up) < keyHoldDuration,
 		Down:      now.Sub(s.state.down) < keyHoldDuration,
-		Space:     now.Sub(s.state.space) < keyHoldDuration,
-		Enter:     now.Sub(s.state.enter) < keyHoldDuration,
-		Backspace: now.Sub(s.state.backspace) < keyHoldDuration,
-		Delete:    now.Sub(s.state.delete_) < keyHoldDuration,
-		Escape:    now.Sub(s.state.escape) < keyHoldDuration,
+		Space:     s.state.space.Equal(now),
+		Enter:     s.state.enter.Equal(now),
+		Backspace: s.state.backspace.Equal(now),
+		Delete:    s.state.delete_.Equal(now),
+		Escape:    s.state.escape.Equal(now),
+		Chat:      s.state.chat.Equal(now),
 		Number:    -1,
 		Pressed:   buf,
 	}
@@ -187,6 +190,8 @@ func applyByteToState(state *keyState, b byte, now time.Time) {
 		state.delete_ = now
 	case '\x1b':
 		state.escape = now
+	case 'c', 'C':
+		state.chat = now
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		state.number = now
 		state.numberVal = int(b - '0')

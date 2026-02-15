@@ -7,6 +7,12 @@ import (
 	"github.com/tomz197/asteroids/internal/physics"
 )
 
+// ChatMessage represents a single chat message from a player.
+type ChatMessage struct {
+	Username string
+	Text     string
+}
+
 // TopScoreEntry represents a single entry on the leaderboard.
 type TopScoreEntry struct {
 	Username string
@@ -35,12 +41,13 @@ type WorldState struct {
 
 // WorldSnapshot is an immutable snapshot of the world state for rendering.
 type WorldSnapshot struct {
-	Objects     []object.Object
-	UserObjects []*object.User
-	Players     int
-	World       object.Screen
-	Delta       time.Duration
-	TopScores   []TopScoreEntry // Top N scores for leaderboard display
+	Objects      []object.Object
+	UserObjects  []*object.User
+	Players      int
+	World        object.Screen
+	Delta        time.Duration
+	TopScores    []TopScoreEntry  // Top N scores for leaderboard display
+	ChatMessages []ChatMessage   // Recent chat messages for all clients
 }
 
 // collisionGridCellSize is the cell size for the spatial hash grids.

@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"io"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/tomz197/asteroids/internal/draw"
 	"github.com/tomz197/asteroids/internal/input"
@@ -114,6 +116,13 @@ func (c *Client) Run() error {
 			c.updateShutdownState()
 		}
 
+		// Cursor visibility: show when chat is open for typing
+		if c.state.ChatOpen {
+			draw.ShowCursor(c.writer)
+		} else {
+			draw.HideCursor(c.writer)
+		}
+
 		// Draw frame
 		if err := c.drawFrame(); err != nil {
 			return err
@@ -146,6 +155,50 @@ func (c *Client) processInput() {
 		c.state.isInactive = true
 	}
 
+	// Chat mode: handle chat-specific input first
+	if c.state.ChatOpen {
+		if c.state.Input.Escape {
+			c.state.ChatOpen = false
+			c.state.ChatInput = ""
+			input.ResetKeyInput(c.inputStream)
+			c.state.Input.Escape = false // Prevent same-frame game action (e.g. dead screen return)
+			return
+		}
+		if c.state.Input.Enter {
+			text := c.state.ChatInput
+			c.state.ChatOpen = false
+			c.state.ChatInput = ""
+			input.ResetKeyInput(c.inputStream)
+			c.state.Input.Enter = false // Prevent same-frame respawn/start
+			c.state.Input.Space = false
+			if text != "" {
+				c.server.SendChatMessage(c.handle.ID, text)
+			}
+			return
+		}
+		if c.state.Input.Backspace || c.state.Input.Delete {
+			runes := []rune(c.state.ChatInput)
+			if len(runes) > 0 {
+				c.state.ChatInput = string(runes[:len(runes)-1])
+			}
+			return
+		}
+		// Append printable runes from Pressed
+		for _, r := range extractPrintableRunes(c.state.Input.Pressed) {
+			if utf8.RuneCountInString(c.state.ChatInput) < config.MaxChatMessageLength {
+				c.state.ChatInput += string(r)
+			}
+		}
+		return
+	}
+
+	// C opens chat (when not already open)
+	if c.state.Input.Chat {
+		c.state.ChatOpen = true
+		input.ResetKeyInput(c.inputStream)
+		return
+	}
+
 	if c.state.Input.Quit {
 		c.state.Running = false
 	}
@@ -154,6 +207,22 @@ func (c *Client) processInput() {
 	if c.state.GameState == GameStatePlaying {
 		c.server.SendInput(c.handle.ID, c.state.Input)
 	}
+}
+
+// extractPrintableRunes returns printable runes from raw input bytes, skipping control chars and escape sequences.
+func extractPrintableRunes(pressed []byte) []rune {
+	var result []rune
+	for i := 0; i < len(pressed); i++ {
+		r, size := utf8.DecodeRune(pressed[i:])
+		if size == 0 {
+			break
+		}
+		i += size - 1
+		if unicode.IsPrint(r) && r != '\x1b' {
+			result = append(result, r)
+		}
+	}
+	return result
 }
 
 // processServerEvents handles events from the server.
@@ -224,6 +293,9 @@ func clampTermSize(termWidth, termHeight int) (renderWidth, renderHeight, offset
 
 // updateStartState handles the start screen.
 func (c *Client) updateStartState() {
+	if c.state.ChatOpen {
+		return // Chat consumes input; don't trigger game actions
+	}
 	if c.state.Input.Space || c.state.Input.Enter {
 		c.startGame()
 	}
@@ -250,6 +322,16 @@ func (c *Client) updatePlayingState() {
 
 // updateDeadState handles the death screen.
 func (c *Client) updateDeadState() {
+	if c.state.ChatOpen {
+		// Chat consumes input; only update respawn timer
+		if c.state.RespawnTimeRemaining > 0 {
+			c.state.RespawnTimeRemaining -= c.state.delta.Seconds()
+			if c.state.RespawnTimeRemaining < 0 {
+				c.state.RespawnTimeRemaining = 0
+			}
+		}
+		return
+	}
 	if c.state.Input.Escape {
 		input.ResetKeyInput(c.inputStream)
 		c.state.GameState = GameStateStart
