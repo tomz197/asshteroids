@@ -56,11 +56,13 @@ func main() {
 	}
 	log.Printf("SSH config: host=%s port=%s hostKeyPath=%s workingDir=%s", host, port, hostKeyPath, workingDir)
 
-	// Initialize pprof server
-	go func() {
-		http.ListenAndServe(":6060", nil)
-		log.Printf("Pprof server started on http://localhost:6060")
-	}()
+	// Initialize pprof server (dev only)
+	if config.GetEnv("ENV", "") == "dev" {
+		go func() {
+			http.ListenAndServe(":6060", nil)
+			log.Printf("Pprof server started on http://localhost:6060")
+		}()
+	}
 
 	// Initialize and start the shared game server
 	serverOnce.Do(func() {
