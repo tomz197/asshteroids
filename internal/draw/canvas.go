@@ -82,6 +82,7 @@ type Canvas struct {
 	scaledBuf       []Point   // Reusable buffer for fillPolygon scaled points
 	intersectionBuf []float64 // Reusable buffer for scanline intersections
 	polygonBuf      []Point   // Reusable buffer for polygon point generation
+	borderHLine     string    // Cached horizontal border string (rebuilt on resize)
 }
 
 // NewCanvas creates a canvas for the given terminal dimensions.
@@ -108,28 +109,28 @@ func NewScaledCanvas(termWidth, termHeight int, logicalWidth, logicalHeight floa
 		scaleY:         float64(subPixelHeight) / logicalHeight,
 		prevCells:      make([]byte, totalCells),
 		forceRedraw:    true, // First frame must render everything
+		borderHLine:    strings.Repeat("─", termWidth),
 	}
 }
 
 // Resize updates the canvas for new terminal dimensions while keeping logical size.
 // Forces a full redraw on the next Render call when the size actually changes.
 func (c *Canvas) Resize(termWidth, termHeight int) {
-	subPixelHeight := termHeight * 2
-
-	// Reallocate if size changed
-	if termWidth != c.termWidth || termHeight != c.termHeight {
-		totalCells := termWidth * termHeight
-		c.pixels = make([]bool, subPixelHeight*termWidth)
-		c.prevCells = make([]byte, totalCells)
-		c.forceRedraw = true
-		c.termWidth = termWidth
-		c.termHeight = termHeight
-		c.subPixelHeight = subPixelHeight
+	if termWidth == c.termWidth && termHeight == c.termHeight {
+		return
 	}
 
-	// Update scale factors
+	subPixelHeight := termHeight * 2
+	totalCells := termWidth * termHeight
+	c.pixels = make([]bool, subPixelHeight*termWidth)
+	c.prevCells = make([]byte, totalCells)
+	c.forceRedraw = true
+	c.termWidth = termWidth
+	c.termHeight = termHeight
+	c.subPixelHeight = subPixelHeight
 	c.scaleX = float64(termWidth) / c.logicalWidth
 	c.scaleY = float64(subPixelHeight) / c.logicalHeight
+	c.borderHLine = strings.Repeat("─", termWidth)
 }
 
 // SetOffset sets the column and row offset for centering the canvas.
@@ -383,7 +384,7 @@ func (c *Canvas) RenderBorder(cw *ChunkWriter) {
 	top := c.offsetRow
 	bottom := c.offsetRow + c.termHeight + 1
 
-	hLine := strings.Repeat("─", c.termWidth)
+	hLine := c.borderHLine
 
 	if hasV {
 		// Top border

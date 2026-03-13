@@ -69,8 +69,11 @@ func (u *User) Update(ctx UpdateContext) (bool, error) {
 	}
 
 	// Apply drag (velocity decay when not thrusting)
-	if !ctx.Input.Up {
-		dragFactor := math.Pow(u.Drag, dt)
+	if !ctx.Input.Up && !ctx.Input.UpLeft && !ctx.Input.UpRight {
+		dragFactor := 1.0 - (1.0-u.Drag)*dt
+		if dragFactor < 0 {
+			dragFactor = 0
+		}
 		u.VX *= dragFactor
 		u.VY *= dragFactor
 	}

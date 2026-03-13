@@ -20,12 +20,10 @@ type Particle struct {
 	Lifetime    float64 // Seconds remaining
 	MaxLifetime float64 // Initial lifetime (for fade calculation)
 	Drag        float64 // Velocity decay (1.0 = no drag)
-	Symbol      rune    // Character to display
-	Fade        bool    // Whether to fade out over lifetime
 }
 
 // NewParticle creates a single particle from the pool.
-func NewParticle(x, y, vx, vy, lifetime float64, symbol rune) *Particle {
+func NewParticle(x, y, vx, vy, lifetime float64) *Particle {
 	p := particlePool.Get().(*Particle)
 	p.X = x
 	p.Y = y
@@ -34,8 +32,6 @@ func NewParticle(x, y, vx, vy, lifetime float64, symbol rune) *Particle {
 	p.Lifetime = lifetime
 	p.MaxLifetime = lifetime
 	p.Drag = 0.95
-	p.Symbol = symbol
-	p.Fade = true
 	return p
 }
 
@@ -52,22 +48,15 @@ func SpawnExplosion(x, y float64, count int, speed, lifetime float64, spawner Sp
 		return
 	}
 
-	symbols := []rune{'#', '@', '*', '%', 'X', 'O', '+', '▪'}
-
 	for i := 0; i < count; i++ {
-		// Random direction
 		angle := rand.Float64() * 2 * math.Pi
-		// Random speed variation (50% to 150%)
 		spd := speed * (0.5 + rand.Float64())
-		// Random lifetime variation (50% to 100%)
 		life := lifetime * (0.5 + rand.Float64()*0.5)
 
 		vx := math.Cos(angle) * spd
 		vy := math.Sin(angle) * spd
 
-		symbol := symbols[rand.Intn(len(symbols))]
-
-		p := NewParticle(x, y, vx, vy, life, symbol)
+		p := NewParticle(x, y, vx, vy, life)
 		spawner.Spawn(p)
 	}
 }
@@ -78,12 +67,9 @@ func SpawnThrust(x, y, angle float64, spawner Spawner) {
 		return
 	}
 
-	// Spawn 1-2 particles behind the ship
 	count := 1 + rand.Intn(2)
-	symbols := []rune{'*', '+', '#', '^', '~'}
 
 	for i := 0; i < count; i++ {
-		// Opposite direction of ship facing, with spread
 		thrustAngle := angle + math.Pi + (rand.Float64()-0.5)*0.5
 		speed := 8.0 + rand.Float64()*4.0
 		lifetime := 0.1 + rand.Float64()*0.15
@@ -91,9 +77,7 @@ func SpawnThrust(x, y, angle float64, spawner Spawner) {
 		vx := math.Cos(thrustAngle) * speed
 		vy := math.Sin(thrustAngle) * speed
 
-		symbol := symbols[rand.Intn(len(symbols))]
-
-		p := NewParticle(x, y, vx, vy, lifetime, symbol)
+		p := NewParticle(x, y, vx, vy, lifetime)
 		p.Drag = 0.85
 		spawner.Spawn(p)
 	}
@@ -109,8 +93,11 @@ func (p *Particle) Update(ctx UpdateContext) (bool, error) {
 		return true, nil // Remove particle
 	}
 
-	// Apply drag
-	dragFactor := math.Pow(p.Drag, dt*60) // Normalize drag to ~60fps
+	// Apply drag (frame-rate-independent linear approximation of exponential decay)
+	dragFactor := 1.0 - (1.0-p.Drag)*(dt*60)
+	if dragFactor < 0 {
+		dragFactor = 0
+	}
 	p.VX *= dragFactor
 	p.VY *= dragFactor
 
@@ -126,11 +113,9 @@ func (p *Particle) Update(ctx UpdateContext) (bool, error) {
 
 // Draw renders the particle as a pixel on the canvas.
 func (p *Particle) Draw(ctx DrawContext) error {
-	// Skip faded particles (< 25% lifetime)
-	if p.Fade && p.MaxLifetime > 0 {
-		if p.Lifetime/p.MaxLifetime < 0.25 {
-			return nil
-		}
+	// Skip faded particles (< 25% lifetime remaining)
+	if p.MaxLifetime > 0 && p.Lifetime/p.MaxLifetime < 0.25 {
+		return nil
 	}
 
 	// Get screen positions (handles world wrapping)

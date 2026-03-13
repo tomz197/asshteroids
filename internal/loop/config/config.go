@@ -28,11 +28,11 @@ const (
 
 // Player
 const (
-	InitialLives          = 3
-	InvincibilitySeconds  = 3.0
-	RespawnTimeoutSeconds = 3.0  // Seconds to wait after death before respawn is allowed
-	PlayerBlinkFrequency  = 10.0 // Hz
-	MaxUsernameLength     = 16   // Maximum display length for player usernames
+	InitialLives         = 3
+	InvincibilityTime    = 3 * time.Second
+	RespawnTimeout       = 3 * time.Second
+	PlayerBlinkFrequency = 10.0 // Hz
+	MaxUsernameLength    = 16   // Maximum display length for player usernames
 )
 
 // Spawning
@@ -42,7 +42,7 @@ const (
 
 // Shutdown
 const (
-	ShutdownDisplaySeconds = 10.0 // Seconds to show shutdown message before auto-disconnect
+	ShutdownDisplayTime = 10 * time.Second
 )
 
 // Inactivity

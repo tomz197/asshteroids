@@ -54,6 +54,12 @@ type Server struct {
 	chatMessages []ChatMessage
 	chatMu       sync.RWMutex
 	chatChan     chan chatMessageRequest
+	chatDirty    bool           // Set when chatMessages changes; cleared after snapshot copy
+	chatSnapshot []ChatMessage  // Cached snapshot of chat messages
+
+	// Reusable buffers for snapshot creation (avoids per-frame allocations)
+	userObjectsBuf []*object.User
+	topScoresBuf   []TopScoreEntry
 }
 
 // chatMessageRequest is a request to broadcast a chat message.
@@ -298,7 +304,7 @@ func (s *Server) SpawnPlayer(clientID int) {
 	player.OwnerID = clientID
 	player.Username = handle.Username
 	handle.Player = player
-	handle.InvincibleTime = config.InvincibilitySeconds // Grant spawn invincibility
+	handle.InvincibleTime = config.InvincibilityTime.Seconds()
 	s.world.AddObject(player)
 }
 
@@ -326,16 +332,19 @@ func (s *Server) ResetScore(clientID int) {
 	}
 }
 
-// removeObjectLocked removes a single object from the world. Must be called with lock held.
+// removeObjectLocked removes a single object from the world using swap-remove (O(1)).
+// Must be called with lock held.
 func (s *Server) removeObjectLocked(target object.Object) {
 	s.world.RemoveObject(target)
-	kept := s.world.Objects[:0]
-	for _, obj := range s.world.Objects {
-		if obj != target {
-			kept = append(kept, obj)
+	objs := s.world.Objects
+	for i, obj := range objs {
+		if obj == target {
+			objs[i] = objs[len(objs)-1]
+			objs[len(objs)-1] = nil // Clear reference for GC
+			s.world.Objects = objs[:len(objs)-1]
+			return
 		}
 	}
-	s.world.Objects = kept
 }
 
 // processRegistrations handles pending client registrations/unregistrations.
@@ -380,8 +389,11 @@ func (s *Server) processChatMessages() {
 			s.chatMu.Lock()
 			s.chatMessages = append(s.chatMessages, msg)
 			if len(s.chatMessages) > config.MaxChatHistory {
-				s.chatMessages = s.chatMessages[len(s.chatMessages)-config.MaxChatHistory:]
+				trimmed := make([]ChatMessage, config.MaxChatHistory)
+				copy(trimmed, s.chatMessages[len(s.chatMessages)-config.MaxChatHistory:])
+				s.chatMessages = trimmed
 			}
+			s.chatDirty = true
 			s.chatMu.Unlock()
 		default:
 			return
@@ -604,7 +616,7 @@ func (s *Server) checkCollisions() {
 			// Mark player for removal (deferred compaction)
 			s.toRemove[handle.Player] = struct{}{}
 			handle.Player = nil
-			handle.RespawnTimeRemaining = config.RespawnTimeoutSeconds
+			handle.RespawnTimeRemaining = config.RespawnTimeout.Seconds()
 
 			// Notify client (include killer username when killed by another player)
 			killedBy := ""
@@ -650,18 +662,32 @@ func (s *Server) createSnapshot() {
 	buf = buf[:len(s.world.Objects)]
 	copy(buf, s.world.Objects)
 
+	// Build user objects list using reusable buffer
+	s.userObjectsBuf = s.userObjectsBuf[:0]
+	for _, obj := range buf {
+		if user, ok := obj.(*object.User); ok {
+			s.userObjectsBuf = append(s.userObjectsBuf, user)
+		}
+	}
+	usersCopy := make([]*object.User, len(s.userObjectsBuf))
+	copy(usersCopy, s.userObjectsBuf)
+
 	// Build top scores leaderboard
 	topScores := s.buildTopScoresLocked()
 
-	// Copy chat messages for snapshot
+	// Copy chat messages for snapshot (only when changed)
 	s.chatMu.RLock()
-	chatMessages := make([]ChatMessage, len(s.chatMessages))
-	copy(chatMessages, s.chatMessages)
+	if s.chatDirty {
+		s.chatSnapshot = make([]ChatMessage, len(s.chatMessages))
+		copy(s.chatSnapshot, s.chatMessages)
+		s.chatDirty = false
+	}
+	chatMessages := s.chatSnapshot
 	s.chatMu.RUnlock()
 
 	snapshot := &WorldSnapshot{
 		Objects:      buf,
-		UserObjects:  object.FilterUsers(buf),
+		UserObjects:  usersCopy,
 		Players:      len(s.clients),
 		World:        s.world.World,
 		Delta:        s.world.Delta,
@@ -678,23 +704,25 @@ func (s *Server) buildTopScoresLocked() []TopScoreEntry {
 	if len(s.clients) == 0 {
 		return nil
 	}
-	entries := make([]TopScoreEntry, 0, len(s.clients))
+	s.topScoresBuf = s.topScoresBuf[:0]
 	for _, h := range s.clients {
 		name := h.Username
 		if name == "" {
 			name = "(anon)"
 		}
-		entries = append(entries, TopScoreEntry{Username: name, Score: h.BestScore, clientID: h.ID})
+		s.topScoresBuf = append(s.topScoresBuf, TopScoreEntry{Username: name, Score: h.BestScore, clientID: h.ID})
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Score != entries[j].Score {
-			return entries[i].Score > entries[j].Score
+	sort.Slice(s.topScoresBuf, func(i, j int) bool {
+		if s.topScoresBuf[i].Score != s.topScoresBuf[j].Score {
+			return s.topScoresBuf[i].Score > s.topScoresBuf[j].Score
 		}
-		return entries[i].clientID < entries[j].clientID
+		return s.topScoresBuf[i].clientID < s.topScoresBuf[j].clientID
 	})
 	n := config.TopScoresCount
-	if n > len(entries) {
-		n = len(entries)
+	if n > len(s.topScoresBuf) {
+		n = len(s.topScoresBuf)
 	}
-	return entries[:n]
+	result := make([]TopScoreEntry, n)
+	copy(result, s.topScoresBuf[:n])
+	return result
 }

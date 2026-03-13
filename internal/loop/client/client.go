@@ -3,6 +3,7 @@ package client
 import (
 	"bufio"
 	"io"
+	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -27,6 +28,7 @@ type Client struct {
 	lastInput    time.Time
 	username     string
 	termSizeFunc draw.TermSizeFunc
+	hudBuf       []byte // Reusable buffer for HUD text formatting
 }
 
 // ClientOptions configures the client.
@@ -149,10 +151,13 @@ func (c *Client) processInput() {
 	if len(c.state.Input.Pressed) > 0 {
 		c.lastInput = time.Now()
 		c.state.isInactive = false
-	} else if time.Since(c.lastInput).Seconds() > config.InactivityDisconnectUser {
-		c.state.Running = false
-	} else if time.Since(c.lastInput).Seconds() > config.InactivityWarnUser {
-		c.state.isInactive = true
+	} else {
+		idle := time.Since(c.lastInput).Seconds()
+		if idle > config.InactivityDisconnectUser {
+			c.state.Running = false
+		} else if idle > config.InactivityWarnUser {
+			c.state.isInactive = true
+		}
 	}
 
 	// Chat mode: handle chat-specific input first
@@ -184,10 +189,19 @@ func (c *Client) processInput() {
 			return
 		}
 		// Append printable runes from Pressed
-		for _, r := range extractPrintableRunes(c.state.Input.Pressed) {
-			if utf8.RuneCountInString(c.state.ChatInput) < config.MaxChatMessageLength {
-				c.state.ChatInput += string(r)
+		printable := extractPrintableRunes(c.state.Input.Pressed)
+		if len(printable) > 0 {
+			var b strings.Builder
+			b.WriteString(c.state.ChatInput)
+			runeCount := utf8.RuneCountInString(c.state.ChatInput)
+			for _, r := range printable {
+				if runeCount >= config.MaxChatMessageLength {
+					break
+				}
+				b.WriteRune(r)
+				runeCount++
 			}
+			c.state.ChatInput = b.String()
 		}
 		return
 	}
@@ -240,13 +254,13 @@ func (c *Client) processServerEvents() {
 				c.state.Lives--
 				c.state.GameState = GameStateDead
 				c.state.Player = nil
-				c.state.RespawnTimeRemaining = config.RespawnTimeoutSeconds
+				c.state.RespawnTimeRemaining = config.RespawnTimeout.Seconds()
 				c.state.KilledBy = event.KilledBy
 			case server.EventScoreAdd:
 				c.state.Score += event.ScoreAdd
 			case server.EventServerShutdown:
 				c.state.GameState = GameStateShutdown
-				c.state.shutdownTimer = config.ShutdownDisplaySeconds
+				c.state.shutdownTimer = config.ShutdownDisplayTime.Seconds()
 			}
 		default:
 			return
@@ -371,7 +385,7 @@ func (c *Client) startGame() {
 	}
 
 	// Grant invincibility on spawn
-	c.state.InvincibleTime = config.InvincibilitySeconds
+	c.state.InvincibleTime = config.InvincibilityTime.Seconds()
 
 	c.state.GameState = GameStatePlaying
 }

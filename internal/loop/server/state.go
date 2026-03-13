@@ -75,7 +75,7 @@ func (w *WorldState) InitGrids() {
 // Returns 0 for non-asteroid objects.
 func asteroidWeight(obj object.Object) int {
 	a, ok := obj.(*object.Asteroid)
-	if !ok || a.Destroyed {
+	if !ok || a.IsDestroyed() {
 		return 0
 	}
 	switch a.Size {

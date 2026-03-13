@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -145,13 +146,17 @@ func (c *Client) drawChat(snapshot *server.WorldSnapshot) {
 		hintRow = termHeight
 	}
 
-	// Draw messages (wrap to multiple lines if needed)
-	var allLines []string
-	for i := 0; i < displayCount; i++ {
-		m := displayMessages[i]
-		fullLine := truncate(m.Username, 12) + ": " + m.Text
-		allLines = append(allLines, wrapText(fullLine, chatWidth)...)
+	// Draw messages (wrap to multiple lines if needed, cached until message count changes)
+	if len(messages) != c.state.cachedChatMsgCount {
+		c.state.cachedChatLines = c.state.cachedChatLines[:0]
+		for i := 0; i < displayCount; i++ {
+			m := displayMessages[i]
+			fullLine := truncate(m.Username, 12) + ": " + m.Text
+			c.state.cachedChatLines = append(c.state.cachedChatLines, wrapText(fullLine, chatWidth)...)
+		}
+		c.state.cachedChatMsgCount = len(messages)
 	}
+	allLines := c.state.cachedChatLines
 	// Take last N lines to fit in available rows (newest at bottom)
 	lineStart := 0
 	if len(allLines) > msgRows {
@@ -178,7 +183,7 @@ func (c *Client) drawChat(snapshot *server.WorldSnapshot) {
 		c.canvas.MarkTextDirty(2, inputRow, chatWidth)
 		c.canvas.MarkTextDirty(2, hintRow, chatWidth)
 	} else {
-		hint := "Press C to strat chatting"
+		hint := "Press C to start chatting"
 		cw.WriteAt(2, hintRow, hint)
 	}
 }
@@ -323,11 +328,16 @@ func truncate(s string, maxLen int) string {
 // residual characters on screen (since we no longer clear every frame).
 func (c *Client) drawPlayingHUD(termWidth, termHeight int, snapshot *server.WorldSnapshot) {
 	cw := c.chunkWriter
-	// Score display (top left) — left-aligned, padded to 8 digits
-	scoreText := fmt.Sprintf("Score: %-8d", c.state.Score)
-	cw.WriteAt(2, 1, scoreText)
 
-	// Top scores (left, below score) — show top 5 in-game to save space
+	// Score display (top left) — left-aligned, padded to fixed width
+	c.hudBuf = append(c.hudBuf[:0], "Score: "...)
+	c.hudBuf = strconv.AppendInt(c.hudBuf, int64(c.state.Score), 10)
+	for len(c.hudBuf) < len("Score: ")+8 {
+		c.hudBuf = append(c.hudBuf, ' ')
+	}
+	cw.WriteAt(2, 1, string(c.hudBuf))
+
+	// Top scores (left, below score)
 	top5 := snapshot.TopScores
 	if len(top5) > 5 {
 		top5 = top5[:5]
@@ -335,7 +345,12 @@ func (c *Client) drawPlayingHUD(termWidth, termHeight int, snapshot *server.Worl
 	c.drawTopScores(cw, 2, 3, top5)
 
 	// Lives display (top right)
-	livesText := fmt.Sprintf("Lives: %-3d", c.state.Lives)
+	c.hudBuf = append(c.hudBuf[:0], "Lives: "...)
+	c.hudBuf = strconv.AppendInt(c.hudBuf, int64(c.state.Lives), 10)
+	for len(c.hudBuf) < len("Lives: ")+3 {
+		c.hudBuf = append(c.hudBuf, ' ')
+	}
+	livesText := string(c.hudBuf)
 	cw.WriteAt(termWidth-len(livesText)-1, 1, livesText)
 
 	// Minimap (top right, below lives)
@@ -348,12 +363,26 @@ func (c *Client) drawPlayingHUD(termWidth, termHeight int, snapshot *server.Worl
 	// Coordinates display (under minimap)
 	if c.state.Player != nil && minimapStartCol >= 1 && minimapStartRow+minimapHeight+2 <= termHeight {
 		px, py := c.state.Player.GetPosition()
-		coordText := fmt.Sprintf("X:%-5.0f Y:%-5.0f", px, py)
-		cw.WriteAt(minimapStartCol, minimapStartRow+minimapHeight+2, coordText)
+		c.hudBuf = append(c.hudBuf[:0], "X:"...)
+		c.hudBuf = strconv.AppendFloat(c.hudBuf, px, 'f', 0, 64)
+		for len(c.hudBuf) < len("X:")+5 {
+			c.hudBuf = append(c.hudBuf, ' ')
+		}
+		c.hudBuf = append(c.hudBuf, " Y:"...)
+		c.hudBuf = strconv.AppendFloat(c.hudBuf, py, 'f', 0, 64)
+		for len(c.hudBuf) < len("X:")+5+len(" Y:")+5 {
+			c.hudBuf = append(c.hudBuf, ' ')
+		}
+		cw.WriteAt(minimapStartCol, minimapStartRow+minimapHeight+2, string(c.hudBuf))
 	}
 
 	// Live players (bottom right)
-	livePlayersText := fmt.Sprintf("Players: %-4d", snapshot.Players)
+	c.hudBuf = append(c.hudBuf[:0], "Players: "...)
+	c.hudBuf = strconv.AppendInt(c.hudBuf, int64(snapshot.Players), 10)
+	for len(c.hudBuf) < len("Players: ")+4 {
+		c.hudBuf = append(c.hudBuf, ' ')
+	}
+	livePlayersText := string(c.hudBuf)
 	cw.WriteAt(termWidth-len(livePlayersText)-1, termHeight, livePlayersText)
 }
 
@@ -403,7 +432,7 @@ func (c *Client) drawMinimap(termWidth, termHeight int, snapshot *server.WorldSn
 
 	// Accumulate minimap output for chunked write
 	cw := c.chunkWriter
-	cw.WriteAt(startCol, startRow, "┌"+strings.Repeat("─", minimapWidth)+"┐")
+	cw.WriteAt(startCol, startRow, minimapTopBorder)
 	c.canvas.MarkTextDirty(startCol, startRow, minimapWidth+2)
 
 	// Each terminal row combines 2 sub-rows via half-block characters (▀▄█)
@@ -449,7 +478,7 @@ func (c *Client) drawMinimap(termWidth, termHeight int, snapshot *server.WorldSn
 		c.canvas.MarkTextDirty(startCol, startRow+1+termRow, minimapWidth+2)
 	}
 
-	cw.WriteAt(startCol, startRow+1+minimapHeight, "└"+strings.Repeat("─", minimapWidth)+"┘")
+	cw.WriteAt(startCol, startRow+1+minimapHeight, minimapBottomBorder)
 	c.canvas.MarkTextDirty(startCol, startRow+1+minimapHeight, minimapWidth+2)
 
 }

@@ -44,9 +44,13 @@ type Asteroid struct {
 	Destroyed       bool         // Mark for removal and splitting
 	SpawnProtection float64      // Seconds of invulnerability remaining after spawn
 
-	// Fixed-size vertex array avoids heap allocation for each asteroid.
-	// NumVertices holds how many entries of Vertices are in use.
+	// Fixed-size vertex arrays avoid heap allocation for each asteroid.
+	// NumVertices holds how many entries are in use.
+	// BaseVX/BaseVY store pre-computed un-rotated vertex offsets (cos/sin * dist),
+	// so drawAt only needs one sin/cos pair per frame instead of per-vertex.
 	Vertices    [maxAsteroidVertices]float64 // Vertex distances from center (for irregular shape)
+	BaseVX      [maxAsteroidVertices]float64 // Pre-computed cos(baseAngle) * dist
+	BaseVY      [maxAsteroidVertices]float64 // Pre-computed sin(baseAngle) * dist
 	NumVertices int                          // Number of active vertices (8-12)
 }
 
@@ -64,12 +68,18 @@ func NewAsteroid(x, y float64, size AsteroidSize, angle float64) *Asteroid {
 	// Random rotation speed (-1 to 1 radians/sec)
 	rotSpeed := (rand.Float64() - 0.5) * 2.0
 
-	// Generate irregular polygon vertices (8-12 vertices)
+	// Generate irregular polygon vertices (8-12 vertices) and pre-compute
+	// un-rotated vertex offsets so drawAt only needs one sin/cos pair per frame.
 	numVerts := 8 + rand.Intn(5)
 	var vertices [maxAsteroidVertices]float64
+	var baseVX, baseVY [maxAsteroidVertices]float64
+	angleStep := 2 * math.Pi / float64(numVerts)
 	for i := 0; i < numVerts; i++ {
-		// Vary radius by ±30% for irregular shape
-		vertices[i] = radius * (0.7 + rand.Float64()*0.6)
+		dist := radius * (0.7 + rand.Float64()*0.6)
+		vertices[i] = dist
+		a := float64(i) * angleStep
+		baseVX[i] = math.Cos(a) * dist
+		baseVY[i] = math.Sin(a) * dist
 	}
 
 	return &Asteroid{
@@ -82,6 +92,8 @@ func NewAsteroid(x, y float64, size AsteroidSize, angle float64) *Asteroid {
 		Size:          size,
 		Radius:        radius,
 		Vertices:      vertices,
+		BaseVX:        baseVX,
+		BaseVY:        baseVY,
 		NumVertices:   numVerts,
 	}
 }
@@ -210,18 +222,17 @@ func (a *Asteroid) drawAt(ctx DrawContext, screenX, screenY float64) {
 	// Safe for concurrent rendering because each client has its own Canvas.
 	points := ctx.Canvas.BorrowPoints(numVerts)
 
-	angleStep := 2 * math.Pi / float64(numVerts)
+	// Rotate pre-computed base vertices by current angle (2 trig calls total)
+	sinA, cosA := math.Sincos(a.Angle)
 	for i := 0; i < numVerts; i++ {
-		// Angle for this vertex
-		vertAngle := a.Angle + float64(i)*angleStep
-		dist := a.Vertices[i]
+		bx := a.BaseVX[i]
+		by := a.BaseVY[i]
 		points[i] = draw.Point{
-			X: screenX + math.Cos(vertAngle)*dist,
-			Y: screenY + math.Sin(vertAngle)*dist,
+			X: screenX + cosA*bx - sinA*by,
+			Y: screenY + sinA*bx + cosA*by,
 		}
 	}
 
-	// Draw to canvas (no aspect ratio needed with 2x vertical resolution)
 	ctx.Canvas.DrawPolygon(points, false)
 }
 

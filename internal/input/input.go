@@ -50,6 +50,7 @@ type keyState struct {
 type Stream struct {
 	ch    chan byte
 	state keyState
+	buf   []byte // Reusable drain buffer (reset to [:0] each frame)
 }
 
 // StartStream spawns a goroutine that reads from r and sends bytes to the stream.
@@ -74,24 +75,25 @@ func StartStream(r *bufio.Reader) *Stream {
 // ReadInput drains all available bytes from the stream (non-blocking).
 // Handles escape sequences for arrow keys and accumulates all pressed keys.
 // Uses key state persistence to allow detecting simultaneous key combinations.
+// Note: Input.Pressed references an internal buffer valid only until the next ReadInput call.
 func ReadInput(s *Stream) Input {
 	now := time.Now()
-	var buf []byte
+	buf := s.buf[:0]
 
 	// Drain all available bytes
+drain:
 	for {
 		select {
 		case b, ok := <-s.ch:
 			if !ok {
-				break
+				break drain
 			}
 			buf = append(buf, b)
 		default:
-			goto parse
+			break drain
 		}
 	}
-
-parse:
+	s.buf = buf
 	// Parse the collected bytes and update key state timestamps
 	for i := 0; i < len(buf); i++ {
 		b := buf[i]

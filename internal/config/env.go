@@ -34,8 +34,10 @@ func LoadEnvFile(path string) error {
 		if !ok {
 			continue
 		}
-		value, _, ok := strings.Cut(rest, "#")
-		if !ok {
+		var value string
+		if idx := strings.Index(rest, " #"); idx >= 0 {
+			value = rest[:idx]
+		} else {
 			value = rest
 		}
 

@@ -23,6 +23,7 @@ import (
 	"github.com/tomz197/asteroids/internal/config"
 	"github.com/tomz197/asteroids/internal/draw"
 	"github.com/tomz197/asteroids/internal/loop/client"
+	loopconfig "github.com/tomz197/asteroids/internal/loop/config"
 	"github.com/tomz197/asteroids/internal/loop/server"
 
 	_ "net/http/pprof"
@@ -32,7 +33,6 @@ const (
 	defaultHost        = "::"
 	defaultPort        = "2222"
 	defaultHostKeyPath = "/app/keys/host_key"
-	maxUsernameLength  = 16
 )
 
 // Global game server - shared by all SSH clients
@@ -59,8 +59,10 @@ func main() {
 	// Initialize pprof server (dev only)
 	if config.GetEnv("ENV", "") == "dev" {
 		go func() {
-			http.ListenAndServe(":6060", nil)
-			log.Printf("Pprof server started on http://localhost:6060")
+			log.Println("Pprof server starting on :6060")
+			if err := http.ListenAndServe(":6060", nil); err != nil {
+				log.Printf("Pprof server error: %v", err)
+			}
 		}()
 	}
 
@@ -203,7 +205,7 @@ func sanitizeUsername(raw string) string {
 		if !unicode.IsGraphic(r) {
 			continue
 		}
-		if count >= maxUsernameLength {
+		if count >= loopconfig.MaxUsernameLength {
 			break
 		}
 		b.WriteRune(r)

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"strings"
 	"time"
 
 	"github.com/tomz197/asteroids/internal/draw"
@@ -24,6 +25,12 @@ const (
 	minimapWidth   = 20
 	minimapHeight  = 10 // Terminal rows
 	minimapSubRows = 20 // Logical sub-rows (2 per terminal row)
+)
+
+// Pre-computed minimap border strings (avoids per-frame strings.Repeat allocation).
+var (
+	minimapTopBorder    = "┌" + strings.Repeat("─", minimapWidth) + "┐"
+	minimapBottomBorder = "└" + strings.Repeat("─", minimapWidth) + "┘"
 )
 
 // ClientState holds per-player state (input, score, camera, etc.).
@@ -52,6 +59,8 @@ type ClientState struct {
 	ChatOpen             bool              // Whether chat input box is active
 	ChatInput            string            // Current message being typed
 	prevChatOpen         bool              // Previous frame's chat state (for transition detection)
+	cachedChatLines      []string          // Cached wrapped chat lines (invalidated on message count change)
+	cachedChatMsgCount   int               // Message count when cache was built
 }
 
 // NewClientState creates a new initialized client state.

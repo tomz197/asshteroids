@@ -1,6 +1,8 @@
 package server
 
 import (
+	"math"
+
 	"github.com/tomz197/asteroids/internal/loop/config"
 	"github.com/tomz197/asteroids/internal/object"
 	"github.com/tomz197/asteroids/internal/physics"
@@ -94,10 +96,10 @@ func checkAsteroidAsteroidCollisions(asteroids []*object.Asteroid, grid *physics
 			if a2.IsDestroyed() {
 				return false
 			}
-			dist := physics.Distance(a1.X, a1.Y, a2.X, a2.Y)
 			minDist := a1.GetRadius() + a2.GetRadius()
-			if dist < minDist && dist > 0 {
-				bounceAsteroids(a1, a2, dist)
+			distSq := physics.DistanceSquared(a1.X, a1.Y, a2.X, a2.Y)
+			if distSq < minDist*minDist && distSq > 0 {
+				bounceAsteroids(a1, a2, math.Sqrt(distSq))
 			}
 			return false
 		})
@@ -123,8 +125,10 @@ func bounceAsteroids(a1, a2 *object.Asteroid, dist float64) {
 	}
 
 	// Use radius squared as mass (area-based mass)
-	m1 := a1.Radius * a1.Radius
-	m2 := a2.Radius * a2.Radius
+	r1 := a1.GetRadius()
+	r2 := a2.GetRadius()
+	m1 := r1 * r1
+	m2 := r2 * r2
 	totalMass := m1 + m2
 
 	// Calculate impulse scalar (elastic collision)
@@ -137,7 +141,7 @@ func bounceAsteroids(a1, a2 *object.Asteroid, dist float64) {
 	a2.VY += impulse * m1 * ny
 
 	// Separate asteroids to prevent overlap
-	overlap := (a1.Radius + a2.Radius) - dist
+	overlap := (r1 + r2) - dist
 	if overlap > 0 {
 		// Push each asteroid away proportionally to their mass ratio
 		sep1 := overlap * m2 / totalMass
