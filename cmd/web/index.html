@@ -138,21 +138,27 @@
         }
 
         .terminal-box {
-            background: #111118;
-            border: 1px solid #333;
+            background: #0d0d12;
+            border: 1px solid #2a2a35;
             border-radius: 8px;
             padding: 2rem;
             margin: 2rem 0;
             text-align: left;
             box-shadow: 
-                0 4px 30px rgba(0, 255, 136, 0.1),
-                inset 0 1px 0 rgba(255,255,255,0.05);
+                0 4px 24px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.03);
         }
 
         .terminal-header {
             display: flex;
+            align-items: center;
             gap: 6px;
             margin-bottom: 1.5rem;
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 6px;
         }
 
         .terminal-dot {
@@ -194,6 +200,103 @@
             color: #666;
             margin-top: 1rem;
             font-size: 0.9rem;
+        }
+
+        .info code {
+            background: rgba(0, 255, 136, 0.1);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 400;
+            color: #888;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-bottom: 1.5rem;
+        }
+
+        .steps {
+            text-align: left;
+            margin: 0 auto 2rem;
+            max-width: 400px;
+            padding-left: 1.5rem;
+            color: #aaa;
+            font-size: 0.95rem;
+            line-height: 1.8;
+        }
+
+        .steps li {
+            margin-bottom: 0.5rem;
+        }
+
+        kbd {
+            display: inline-block;
+            padding: 0.15em 0.4em;
+            font-size: 0.85em;
+            background: #1a1a22;
+            border: 1px solid #333;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        .copy-btn {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.8rem;
+            background: #1a1a22;
+            border: 1px solid #2a2a35;
+            border-radius: 6px;
+            color: #888;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .copy-btn:hover {
+            color: #00ff88;
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.08);
+        }
+
+        .copy-btn:focus-visible {
+            outline: 2px solid #00ff88;
+            outline-offset: 2px;
+        }
+
+        .copy-btn:active {
+            transform: scale(0.98);
+        }
+
+        .copy-btn.copied {
+            color: #00ff88;
+            border-color: #00ff88;
+        }
+
+        .copy-btn .copy-icon,
+        .copy-btn .check-icon {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        .copy-btn .check-icon {
+            display: none;
+        }
+
+        .copy-btn.copied .copy-icon {
+            display: none;
+        }
+
+        .copy-btn.copied .check-icon {
+            display: block;
         }
 
         .github-link {
@@ -257,19 +360,38 @@
         </header>
 
         <section aria-label="How to connect">
+            <h2 class="section-title">How to play</h2>
+            <ol class="steps">
+                <li>Open your terminal</li>
+                <li>Run the command below</li>
+                <li>Use <kbd>WASD</kbd> or <kbd>↑↓←→</kbd> to move, <kbd>Space</kbd> to shoot</li>
+            </ol>
+
             <div class="terminal-box">
-                <div class="terminal-header" aria-hidden="true">
-                    <div class="terminal-dot dot-red"></div>
-                    <div class="terminal-dot dot-yellow"></div>
-                    <div class="terminal-dot dot-green"></div>
+                <div class="terminal-header">
+                    <div class="terminal-dots" aria-hidden="true">
+                        <div class="terminal-dot dot-red"></div>
+                        <div class="terminal-dot dot-yellow"></div>
+                        <div class="terminal-dot dot-green"></div>
+                    </div>
+                    <button type="button" class="copy-btn" id="copyBtn" title="Copy command" aria-label="Copy SSH command to clipboard">
+                        <svg class="copy-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                        </svg>
+                        <svg class="check-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span class="copy-text">Copy</span>
+                    </button>
                 </div>
                 <div class="command">
                     <span class="prompt">$</span>
-                    <code>ssh {{.SSHHost}}</code>
+                    <code id="sshCommand">ssh {{.SSHHost}}</code>
                     <span class="cursor" aria-hidden="true"></span>
                 </div>
-                <p class="info">PTY allocation required (-t flag if needed)</p>
+                <p class="info">PTY required — add <code>-t</code> if needed. Use <code>yourname@{{.SSHHost}}</code> for a custom in-game name.</p>
             </div>
+
         </section>
 
         <nav aria-label="Project links">
@@ -281,5 +403,30 @@
             </a>
         </nav>
     </main>
+
+    <script>
+        (function() {
+            var btn = document.getElementById('copyBtn');
+            var cmd = document.getElementById('sshCommand');
+            if (!btn || !cmd) return;
+
+            btn.addEventListener('click', function() {
+                var text = cmd.textContent.trim();
+                navigator.clipboard.writeText(text).then(function() {
+                    btn.classList.add('copied');
+                    btn.querySelector('.copy-text').textContent = 'Copied!';
+                    setTimeout(function() {
+                        btn.classList.remove('copied');
+                        btn.querySelector('.copy-text').textContent = 'Copy';
+                    }, 2000);
+                }).catch(function() {
+                    btn.querySelector('.copy-text').textContent = 'Failed';
+                    setTimeout(function() {
+                        btn.querySelector('.copy-text').textContent = 'Copy';
+                    }, 2000);
+                });
+            });
+        })();
+    </script>
 </body>
 </html>

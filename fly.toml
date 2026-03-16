@@ -12,6 +12,7 @@ primary_region = 'fra'
   SSH_HOST = "::"
   SSH_PORT = "2222"
   SSH_HOST_KEY = "/app/keys/host_key"
+  SSH_DISPLAY_HOST = "asshteroids.fly.dev"
 
 # HTTP service for web interface
 [http_service]
