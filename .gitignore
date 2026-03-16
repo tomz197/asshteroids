@@ -15,6 +15,7 @@
 .cursorrules
 .cursor
 
-# Build artifacts
 ./web
 ./ssh
+
+pprof/

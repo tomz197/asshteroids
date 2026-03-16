@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -57,14 +58,16 @@ func main() {
 	log.Printf("SSH config: host=%s port=%s hostKeyPath=%s workingDir=%s", host, port, hostKeyPath, workingDir)
 
 	// Initialize pprof server (dev only)
-	if config.GetEnv("ENV", "") == "dev" {
-		go func() {
-			log.Println("Pprof server starting on :6060")
-			if err := http.ListenAndServe(":6060", nil); err != nil {
-				log.Printf("Pprof server error: %v", err)
-			}
-		}()
-	}
+	// if config.GetEnv("ENV", "") == "dev" {
+	runtime.SetMutexProfileFraction(5)
+	runtime.SetBlockProfileRate(1)
+	go func() {
+		log.Println("Pprof server starting on :6060")
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Printf("Pprof server error: %v", err)
+		}
+	}()
+	// }
 
 	// Initialize and start the shared game server
 	serverOnce.Do(func() {

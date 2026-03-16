@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -194,10 +193,11 @@ func (c *Client) drawInactivityScreen(centerX, centerY int) {
 	title := "INACTIVITY WARNING"
 	cw.WriteAt(centerX-len(title)/2, centerY-2, title)
 
-	msg := fmt.Sprintf(
-		"You have been inactive for too long. You will be disconnected in %d seconds.",
-		int(config.InactivityDisconnectUser-time.Since(c.lastInput).Seconds()),
-	)
+	b := c.hudBuf[:0]
+	b = append(b, "You have been inactive for too long. You will be disconnected in "...)
+	b = strconv.AppendInt(b, int64(config.InactivityDisconnectUser-time.Since(c.lastInput).Seconds()), 10)
+	b = append(b, " seconds."...)
+	msg := string(b)
 	cw.WriteAt(centerX-len(msg)/2, centerY, msg)
 
 	hint := "Press any key to continue"
@@ -262,10 +262,10 @@ func (c *Client) drawStartScreen(centerX, centerY int, snapshot *server.WorldSna
 	// GitHub link (OSC 8 clickable hyperlink)
 	ghURL := "https://github.com/tomz197/asshteroids"
 	ghLabel := "Click to view on github"
-	ghLine := fmt.Sprintf("\033]8;;%s\033\\%s\033]8;;\033\\", ghURL, ghLabel)
+	ghLine := "\033]8;;" + ghURL + "\033\\" + ghLabel + "\033]8;;\033\\"
 	cw.WriteAt(centerX-len(ghLabel)/2, controlsY+len(controlLines)+4, ghLine)
 	ghLabel2 := "github.com/tomz197/asshteroids"
-	ghLine2 := fmt.Sprintf("\033]8;;%s\033\\%s\033]8;;\033\\", ghURL, ghLabel2)
+	ghLine2 := "\033]8;;" + ghURL + "\033\\" + ghLabel2 + "\033]8;;\033\\"
 	cw.WriteAt(centerX-len(ghLabel2)/2, controlsY+len(controlLines)+5, ghLine2)
 }
 
@@ -277,8 +277,27 @@ func (c *Client) drawTopScores(cw *draw.ChunkWriter, col, row int, topScores []s
 	header := "Top Scores"
 	cw.WriteAt(col, row, header)
 	for i, e := range topScores {
-		line := fmt.Sprintf("#%-2d %-12s %6d", i+1, truncate(e.Username, 12), e.Score)
-		cw.WriteAt(col, row+1+i, line)
+		// "#%-2d %-12s %6d" without fmt.Sprintf
+		b := c.hudBuf[:0]
+		b = append(b, '#')
+		b = strconv.AppendInt(b, int64(i+1), 10)
+		for len(b) < 3 {
+			b = append(b, ' ')
+		}
+		b = append(b, ' ')
+		name := truncate(e.Username, 12)
+		b = append(b, name...)
+		for len(b) < 4+12 {
+			b = append(b, ' ')
+		}
+		// Right-align score in 6 chars: measure digit count, then pad
+		var numBuf [20]byte
+		digits := strconv.AppendInt(numBuf[:0], int64(e.Score), 10)
+		for j := len(digits); j < 6; j++ {
+			b = append(b, ' ')
+		}
+		b = append(b, digits...)
+		cw.WriteAt(col, row+1+i, string(b))
 	}
 }
 
@@ -522,24 +541,34 @@ func (c *Client) drawDeadScreen(centerX, centerY int) {
 	// Killed by (when killed by another player)
 	offset := 0
 	if c.state.KilledBy != "" {
-		killedByText := fmt.Sprintf("Killed by %s", c.state.KilledBy)
+		killedByText := "Killed by " + c.state.KilledBy
 		cw.WriteAt(centerX-len(killedByText)/2, titleStartY+len(titleArt)+offset, killedByText)
 		offset++
 	}
 
 	// Score
-	scoreText := fmt.Sprintf("Score: %d", c.state.Score)
+	b := c.hudBuf[:0]
+	b = append(b, "Score: "...)
+	b = strconv.AppendInt(b, int64(c.state.Score), 10)
+	scoreText := string(b)
 	cw.WriteAt(centerX-len(scoreText)/2, titleStartY+len(titleArt)+offset+1, scoreText)
 
 	// Lives or game over info
 	if c.state.Lives > 0 {
-		livesText := fmt.Sprintf("Lives remaining: %d", c.state.Lives)
+		b = b[:0]
+		b = append(b, "Lives remaining: "...)
+		b = strconv.AppendInt(b, int64(c.state.Lives), 10)
+		livesText := string(b)
 		cw.WriteAt(centerX-len(livesText)/2, titleStartY+len(titleArt)+3, livesText)
 	}
 
 	// Respawn countdown or prompt
 	if c.state.RespawnTimeRemaining > 0 {
-		countdown := fmt.Sprintf("Respawn in %.1f seconds...", c.state.RespawnTimeRemaining)
+		b = b[:0]
+		b = append(b, "Respawn in "...)
+		b = strconv.AppendFloat(b, c.state.RespawnTimeRemaining, 'f', 1, 64)
+		b = append(b, " seconds..."...)
+		countdown := string(b)
 		cw.WriteAt(centerX-len(countdown)/2, titleStartY+len(titleArt)+5, countdown)
 	} else if time.Now().UnixMilli()/600%2 == 0 {
 		var prompt string
@@ -567,7 +596,11 @@ func (c *Client) drawShutdownScreen(centerX, centerY int) {
 	cw.WriteAt(centerX-len(msg2)/2, centerY, msg2)
 
 	remaining := int(c.state.shutdownTimer) + 1
-	countdown := fmt.Sprintf("Disconnecting in %d seconds...", remaining)
+	b := c.hudBuf[:0]
+	b = append(b, "Disconnecting in "...)
+	b = strconv.AppendInt(b, int64(remaining), 10)
+	b = append(b, " seconds..."...)
+	countdown := string(b)
 	cw.WriteAt(centerX-len(countdown)/2, centerY+2, countdown)
 
 	hint := "Press Q to disconnect now"

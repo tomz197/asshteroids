@@ -1,9 +1,10 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"math/rand"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -712,11 +713,11 @@ func (s *Server) buildTopScoresLocked() []TopScoreEntry {
 		}
 		s.topScoresBuf = append(s.topScoresBuf, TopScoreEntry{Username: name, Score: h.BestScore, clientID: h.ID})
 	}
-	sort.Slice(s.topScoresBuf, func(i, j int) bool {
-		if s.topScoresBuf[i].Score != s.topScoresBuf[j].Score {
-			return s.topScoresBuf[i].Score > s.topScoresBuf[j].Score
+	slices.SortFunc(s.topScoresBuf, func(a, b TopScoreEntry) int {
+		if c := cmp.Compare(b.Score, a.Score); c != 0 {
+			return c
 		}
-		return s.topScoresBuf[i].clientID < s.topScoresBuf[j].clientID
+		return cmp.Compare(a.clientID, b.clientID)
 	})
 	n := config.TopScoresCount
 	if n > len(s.topScoresBuf) {

@@ -2,7 +2,7 @@ package draw
 
 import (
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -290,7 +290,7 @@ func (c *Canvas) fillPolygon(points []Point) {
 		// Store back in case it grew
 		c.intersectionBuf = intersections
 
-		sort.Float64s(intersections)
+		slices.Sort(intersections)
 
 		for i := 0; i+1 < len(intersections); i += 2 {
 			xStart := int(math.Ceil(intersections[i]))
@@ -311,6 +311,10 @@ const maxChunkSize = 1400
 // (or were externally dirtied via MarkTextDirty) are written. Empty cells
 // that were previously filled are overwritten with spaces, eliminating
 // the need for full-screen clearing and reducing SSH bandwidth.
+//
+// When consecutive changed cells appear in a row, only the first emits a
+// CSI cursor-position sequence; subsequent cells rely on the terminal's
+// auto-advancing cursor, saving ~10 bytes per sequential cell.
 func (c *Canvas) Render(cw *ChunkWriter) {
 	force := c.forceRedraw
 	c.forceRedraw = false
@@ -321,6 +325,7 @@ func (c *Canvas) Render(cw *ChunkWriter) {
 		topOffset := topY * c.termWidth
 		bottomOffset := bottomY * c.termWidth
 		rowBase := row * c.termWidth
+		lastWrittenCol := -2 // Track last column written for run detection
 
 		for col := 0; col < c.termWidth; col++ {
 			top := c.pixels[topOffset+col]
@@ -345,15 +350,18 @@ func (c *Canvas) Render(cw *ChunkWriter) {
 			c.prevCells[cellIdx] = byte(current)
 
 			if !force && !dirty && current == prev {
-				continue // No change, skip this cell
+				continue
 			}
 
-			// Write ANSI cursor position + character directly to ChunkWriter
-			cw.WriteString("\033[")
-			cw.Write(strconv.AppendInt(c.numBuf[:0], int64(row+1+c.offsetRow), 10))
-			cw.WriteByte(';')
-			cw.Write(strconv.AppendInt(c.numBuf[:0], int64(col+1+c.offsetCol), 10))
-			cw.WriteByte('H')
+			// Only emit CSI when cursor isn't already at the right position
+			if col != lastWrittenCol+1 {
+				cw.WriteString("\033[")
+				cw.Write(strconv.AppendInt(c.numBuf[:0], int64(row+1+c.offsetRow), 10))
+				cw.WriteByte(';')
+				cw.Write(strconv.AppendInt(c.numBuf[:0], int64(col+1+c.offsetCol), 10))
+				cw.WriteByte('H')
+			}
+			lastWrittenCol = col
 
 			switch current {
 			case cellFull:
@@ -367,7 +375,6 @@ func (c *Canvas) Render(cw *ChunkWriter) {
 			}
 		}
 	}
-
 }
 
 // RenderBorder draws a box border around the canvas area when the terminal
